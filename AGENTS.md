@@ -1,0 +1,161 @@
+# AGENTS.md — SlopClean
+
+Guidance for humans and coding agents working in this repository.
+
+**License:** AGPL-3.0-or-later  
+**Product goal:** CCleaner-like Windows cleanup/optimization — modular, preview-first, no ads, no telemetry, no upselling.
+
+---
+
+## Architecture decisions
+
+### Stack
+
+| Decision | Choice | Rationale |
+|----------|--------|-----------|
+| Runtime | .NET 10 (LTS) | Current LTS; support through Nov 2028 |
+| UI | WinUI 3 (Windows App SDK), Windows-only | Microsoft’s current desktop stack for Win10/11 |
+| Packaging (MVP) | Unpackaged, self-contained, x64 | Simpler admin/debug story; no separate runtime install for end users |
+| License | AGPL-3.0-or-later | Keep the tool free and share-alike for everyone |
+| Pattern | MVVM (CommunityToolkit.Mvvm) | Thin views, testable ViewModels |
+
+Do **not** introduce WPF, Avalonia, Electron, or cross-platform UI unless the product scope changes explicitly.
+
+### Solution layout
+
+```
+src/
+  SlopClean.App/                 # WinUI host (shell, pages, controls, DI)
+  SlopClean.Core/                # UI-/Windows-free contracts, engine, safety
+  SlopClean.Platform.Windows/    # OS implementations (FS, registry, processes, services, broker)
+  SlopClean.Elevated/            # Short-lived UAC helper for privileged ops only
+  SlopClean.Modules/             # Built-in optimization modules
+tests/
+  SlopClean.Core.Tests/
+  SlopClean.Modules.Tests/       # Modules against fakes only
+  SlopClean.Platform.Windows.Tests/
+```
+
+**Rules:**
+
+- Modules and Core must not reference WinUI or `Microsoft.Win32` APIs directly for business logic that can be abstracted.
+- All OS access goes through Core abstractions (`IFileSystem`, `IRegistryStore`, `IProcessInspector`, `IServiceManager`, `IRecycleBinService`, `IPrivilegeBroker`) implemented in `Platform.Windows`.
+- Built-in modules are registered via DI at startup. Runtime plugin DLL discovery is **out of MVP scope**.
+
+### Module capabilities (not one fat interface)
+
+Use capability interfaces so modules do not implement meaningless methods:
+
+- `IModule` — identity, category, parameters
+- `IScannableModule` — `ScanAsync` (always read-only)
+- `IApplicableModule` — apply only explicit `OptimizationAction`s
+- `IReversibleModule` — real restore path (e.g. `.reg` export + import)
+
+Findings and actions are **immutable**. Actions carry `AllowedRoot`, `OperationCode`, and `RequiredPrivilege`. Unknown operation codes are rejected.
+
+### Engine and scheduling
+
+- `OptimizationEngine` orchestrates scan/apply, cancellation, and safety checks.
+- At most one I/O-heavy scan per drive (`DriveScanScheduler`).
+- Apply is **sequential**, idempotent where possible, and fault-isolated (one locked file must not abort the whole batch).
+- Elevated actions go through `IPrivilegeBroker` → `SlopClean.Elevated`, not by relaunching the whole UI as admin.
+
+### Elevation model
+
+| Rule | Detail |
+|------|--------|
+| UI process | Always `asInvoker` |
+| Privileged work | Separate short-lived helper via UAC (`runas`) |
+| IPC | Named pipe, same-user ACL, one-time nonce |
+| Helper contract | Fixed operation codes only; re-validates `SafetyPolicy` independently |
+
+Never set `requireAdministrator` on the WinUI app.
+
+### Safety policy (non-negotiable)
+
+- Preview-first: no apply without scan + explicit selection.
+- Scan never mutates system state.
+- Canonicalize paths; re-validate immediately before apply.
+- Do not follow reparse points (junctions/symlinks).
+- Never delete drive roots, Windows roots, System32/SysWOW64 trees, or profile/AppData roots.
+- Under `%windir%`, only `Windows\Temp` is a deletable subtree.
+- Registry mutations only in allowlisted uninstall/run locations; backup + restore required for reversible registry modules.
+- Logging is local, rotating, and path-redacted (`LogRedactor` / `RedactingEnricher`). No phone-home.
+
+### UI (control-first)
+
+- Shell and Pages stay thin (composition + navigation).
+- Prefer domain-sized reusable controls (`ParameterForm`, `FindingList`, `ModuleCard`, `ScanProgressControl`).
+- One generic `ModuleDetailPage` driven by module contracts — not seven giant per-module pages.
+- Avoid micro-controls without a clear responsibility.
+- Large lists: virtualization / incremental results + cancellation.
+- UI strings: `.resw` (de-DE / en-US), not hard-coded sprawl in XAML.
+
+### MVP modules (intent)
+
+| Module | Apply? | Notes |
+|--------|--------|-------|
+| TempCleaner | Yes | User + Windows Temp; **no Prefetch** |
+| BrowserCleaner | Yes | Cache default; detect running browsers |
+| RecycleBin | Yes | Confirm before empty |
+| StartupManager | Yes | Disable/enable with restore; no hard delete in MVP |
+| DiskAnalyzer | No | Analysis only |
+| UninstallCleanup | Yes (conservative) | Orphaned uninstall/run entries only; AppData leftovers are **hints**, never auto-deleted |
+| ServiceAdvisor | No | Read-only curated JSON recommendations |
+
+### Out of MVP
+
+- External plugin DLLs
+- Cloud sync, accounts, telemetry, update ads
+- Aggressive registry/driver tweaks
+- Auto-deleting guessed program leftovers
+- Changing Windows service start types
+- MSIX Store publishing (may follow)
+
+---
+
+## Test-driven development (TDD)
+
+**Required workflow for new behavior and bug fixes:**
+
+1. **Red** — Write or update a failing test that describes the desired behavior.
+2. **Green** — Implement the minimal production change to pass.
+3. **Refactor** — Clean up with tests still green.
+
+### Where tests live
+
+| Layer | Project | Style |
+|-------|---------|--------|
+| Contracts, Safety, Engine | `SlopClean.Core.Tests` | Pure unit tests + fakes |
+| Modules | `SlopClean.Modules.Tests` | Fakes only — never touch real user files, autostart, services, or production registry |
+| Windows I/O / broker contracts | `SlopClean.Platform.Windows.Tests` | Temp directories / dedicated test keys; negative tests for elevated helper contracts |
+
+### Hard TDD rules
+
+- Destructive behavior (delete file/dir, registry mutate, empty recycle bin) **must** have tests before merge.
+- SafetyPolicy rules are tested first; modules must not bypass the policy.
+- Prefer fakes implementing Core abstractions over mocking frameworks for filesystem/registry.
+- Do not “fix” by manually deleting real system paths in CI.
+- When a bug is found (e.g. System32 delete incorrectly allowed), add a regression test **before** fixing.
+
+### Commands
+
+```powershell
+make ci          # restore, build, test
+make test        # build + test
+dotnet test SlopClean.slnx -c Release
+```
+
+GitHub Actions: `CI` (push), `PR` (pull requests), `Release` (tags `v*.*.*` / manual). Shared steps live in `.github/workflows/reusable-build.yml`.
+
+---
+
+## Agent working agreements
+
+- Prefer `make` targets (`run`, `build`, `ci`, `release`) for local parity with CI.
+- Keep PRs focused; do not expand scope into out-of-MVP features.
+- Do not weaken SafetyPolicy for convenience.
+- Do not add ads, telemetry, or remote calls.
+- Match existing naming, DI registration patterns, and control-first UI structure.
+- After substantive changes: run tests (and App build if UI/platform touched).
+- Commit only when the user asks; never force-push `master`/`main`.
