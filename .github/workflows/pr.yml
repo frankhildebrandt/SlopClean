@@ -1,0 +1,35 @@
+name: PR
+
+on:
+  pull_request:
+    branches: [master, main]
+    types: [opened, synchronize, reopened, ready_for_review]
+
+concurrency:
+  group: pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  build-test:
+    name: Build and test
+    if: ${{ !github.event.pull_request.draft }}
+    uses: ./.github/workflows/reusable-build.yml
+    with:
+      configuration: Release
+      publish: false
+      upload_test_results: true
+
+  summary:
+    name: PR checks
+    runs-on: ubuntu-latest
+    needs: build-test
+    if: ${{ always() && !github.event.pull_request.draft }}
+    steps:
+      - name: Require green build
+        if: ${{ needs.build-test.result != 'success' }}
+        run: |
+          echo "PR build/test failed: ${{ needs.build-test.result }}"
+          exit 1
+      - name: OK
+        if: ${{ needs.build-test.result == 'success' }}
+        run: echo "PR checks passed"

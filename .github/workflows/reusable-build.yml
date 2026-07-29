@@ -1,0 +1,95 @@
+name: Reusable Build
+
+on:
+  workflow_call:
+    inputs:
+      configuration:
+        description: Build configuration
+        type: string
+        required: false
+        default: Release
+      publish:
+        description: Publish self-contained win-x64 artifacts
+        type: boolean
+        required: false
+        default: false
+      upload_test_results:
+        description: Upload TRX test results
+        type: boolean
+        required: false
+        default: true
+    outputs:
+      artifact_name:
+        description: Published artifact name when publish=true
+        value: ${{ jobs.build.outputs.artifact_name }}
+
+jobs:
+  build:
+    runs-on: windows-latest
+    outputs:
+      artifact_name: ${{ steps.meta.outputs.artifact_name }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Restore
+        run: dotnet restore SlopClean.slnx
+
+      - name: Build Elevated
+        run: dotnet build src/SlopClean.Elevated/SlopClean.Elevated.csproj -c ${{ inputs.configuration }} -p:Platform=x64 --no-restore
+
+      - name: Build App
+        run: dotnet build src/SlopClean.App/SlopClean.App.csproj -c ${{ inputs.configuration }} -p:Platform=x64 --no-restore
+
+      - name: Build Solution
+        run: dotnet build SlopClean.slnx -c ${{ inputs.configuration }} --no-restore
+
+      - name: Test
+        run: dotnet test SlopClean.slnx -c ${{ inputs.configuration }} --no-build --logger trx --results-directory TestResults
+
+      - name: Upload test results
+        if: ${{ always() && inputs.upload_test_results }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ github.run_id }}
+          path: TestResults/**
+          if-no-files-found: ignore
+
+      - name: Publish win-x64
+        if: ${{ inputs.publish }}
+        shell: pwsh
+        run: |
+          $out = "artifacts/slopclean-win-x64"
+          New-Item -ItemType Directory -Force -Path $out | Out-Null
+          dotnet publish src/SlopClean.App/SlopClean.App.csproj `
+            -c ${{ inputs.configuration }} `
+            -r win-x64 `
+            --self-contained true `
+            -p:Platform=x64 `
+            -o $out
+          $hash = (Get-FileHash "$out/SlopClean.App.exe" -Algorithm SHA256).Hash
+          Set-Content -Path "artifacts/slopclean-win-x64.sha256.txt" -Value "SHA256 $hash  SlopClean.App.exe"
+          if (Test-Path "artifacts/slopclean-win-x64.zip") { Remove-Item -Force "artifacts/slopclean-win-x64.zip" }
+          Compress-Archive -Path "$out\*" -DestinationPath "artifacts/slopclean-win-x64.zip"
+
+      - name: Artifact metadata
+        id: meta
+        if: ${{ inputs.publish }}
+        shell: pwsh
+        run: |
+          Write-Output "artifact_name=slopclean-win-x64" >> $env:GITHUB_OUTPUT
+
+      - name: Upload publish artifacts
+        if: ${{ inputs.publish }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: slopclean-win-x64
+          path: |
+            artifacts/slopclean-win-x64/**
+            artifacts/slopclean-win-x64.sha256.txt
+            artifacts/slopclean-win-x64.zip
