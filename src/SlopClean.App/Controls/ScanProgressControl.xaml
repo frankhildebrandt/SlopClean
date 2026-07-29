@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<UserControl
+    x:Class="SlopClean.App.Controls.ScanProgressControl"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <StackPanel Spacing="8">
+        <ProgressBar IsIndeterminate="{x:Bind IsBusy, Mode=OneWay}" />
+        <TextBlock Text="{x:Bind StatusText, Mode=OneWay}" />
+    </StackPanel>
+</UserControl>

@@ -1,0 +1,14 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/SlopClean.App/SlopClean.App.csproj" />
+    <Project Path="src/SlopClean.Core/SlopClean.Core.csproj" />
+    <Project Path="src/SlopClean.Elevated/SlopClean.Elevated.csproj" />
+    <Project Path="src/SlopClean.Modules/SlopClean.Modules.csproj" />
+    <Project Path="src/SlopClean.Platform.Windows/SlopClean.Platform.Windows.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/SlopClean.Core.Tests/SlopClean.Core.Tests.csproj" />
+    <Project Path="tests/SlopClean.Modules.Tests/SlopClean.Modules.Tests.csproj" />
+    <Project Path="tests/SlopClean.Platform.Windows.Tests/SlopClean.Platform.Windows.Tests.csproj" />
+  </Folder>
+</Solution>

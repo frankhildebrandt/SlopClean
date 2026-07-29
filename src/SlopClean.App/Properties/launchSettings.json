@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "SlopClean.App (Package)": {
+      "commandName": "MsixPackage"
+    },
+    "SlopClean.App (Unpackaged)": {
+      "commandName": "Project"
+    }
+  }
+}

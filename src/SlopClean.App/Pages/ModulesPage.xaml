@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Page
+    x:Class="SlopClean.App.Pages.ModulesPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:SlopClean.App.Controls"
+    xmlns:vm="using:SlopClean.App.ViewModels">
+    <ScrollViewer Padding="24">
+        <StackPanel Spacing="16">
+            <TextBlock Style="{StaticResource TitleTextBlockStyle}" Text="Modules" />
+            <ItemsRepeater ItemsSource="{x:Bind Modules}">
+                <ItemsRepeater.Layout>
+                    <UniformGridLayout MinItemWidth="280" MinColumnSpacing="12" MinRowSpacing="12" />
+                </ItemsRepeater.Layout>
+                <ItemsRepeater.ItemTemplate>
+                    <DataTemplate x:DataType="vm:ModuleSummaryViewModel">
+                        <controls:ModuleCard
+                            Category="{x:Bind Category}"
+                            Description="{x:Bind Description}"
+                            ModuleId="{x:Bind Id}"
+                            Title="{x:Bind Name}"
+                            OpenRequested="ModuleCard_OpenRequested" />
+                    </DataTemplate>
+                </ItemsRepeater.ItemTemplate>
+            </ItemsRepeater>
+        </StackPanel>
+    </ScrollViewer>
+</Page>

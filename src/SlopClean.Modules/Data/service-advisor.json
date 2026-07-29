@@ -1,0 +1,51 @@
+{
+  "version": 1,
+  "supportedWindowsBuilds": {
+    "min": 19041,
+    "max": 99999
+  },
+  "services": [
+    {
+      "name": "DiagTrack",
+      "displayName": "Connected User Experiences and Telemetry",
+      "recommendedStartType": "Disabled",
+      "reason": "Optional telemetry service. Disabling reduces diagnostic uploads on consumer PCs.",
+      "risk": "Low"
+    },
+    {
+      "name": "SysMain",
+      "displayName": "SysMain (Superfetch)",
+      "recommendedStartType": "Manual",
+      "reason": "Can increase disk activity on HDDs. Keep Automatic on SSDs with light load if preferred.",
+      "risk": "Medium"
+    },
+    {
+      "name": "WSearch",
+      "displayName": "Windows Search",
+      "recommendedStartType": "Manual",
+      "reason": "Indexing can use CPU/disk. Only consider changing if you rarely use Start/search.",
+      "risk": "Medium"
+    },
+    {
+      "name": "XboxGipSvc",
+      "displayName": "Xbox Accessory Management Service",
+      "recommendedStartType": "Manual",
+      "reason": "Only needed for Xbox accessories.",
+      "risk": "Low"
+    },
+    {
+      "name": "XblAuthManager",
+      "displayName": "Xbox Live Auth Manager",
+      "recommendedStartType": "Manual",
+      "reason": "Only needed for Xbox Live features and some Store games.",
+      "risk": "Low"
+    },
+    {
+      "name": "RemoteRegistry",
+      "displayName": "Remote Registry",
+      "recommendedStartType": "Disabled",
+      "reason": "Remote registry access is rarely needed on personal PCs and increases attack surface.",
+      "risk": "Low"
+    }
+  ]
+}

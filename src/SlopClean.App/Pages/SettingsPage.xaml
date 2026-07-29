@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Page
+    x:Class="SlopClean.App.Pages.SettingsPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <ScrollViewer Padding="24">
+        <StackPanel Spacing="16" MaxWidth="640">
+            <TextBlock Style="{StaticResource TitleTextBlockStyle}" Text="Settings" />
+
+            <TextBlock Text="Theme" />
+            <ComboBox
+                Width="240"
+                ItemsSource="{x:Bind ViewModel.Themes}"
+                SelectedItem="{x:Bind ViewModel.SelectedTheme, Mode=TwoWay}" />
+
+            <TextBlock Text="Language" />
+            <ComboBox
+                Width="240"
+                ItemsSource="{x:Bind ViewModel.Languages}"
+                SelectedItem="{x:Bind ViewModel.SelectedLanguage, Mode=TwoWay}" />
+
+            <Button Command="{x:Bind ViewModel.OpenLogFolderCommand}" Content="Open log folder" />
+            <TextBlock Text="{x:Bind ViewModel.StatusText, Mode=OneWay}" />
+
+            <InfoBar
+                IsOpen="True"
+                IsClosable="False"
+                Severity="Informational"
+                Title="Privacy"
+                Message="SlopClean stores logs locally only. Paths are redacted. No telemetry is sent." />
+        </StackPanel>
+    </ScrollViewer>
+</Page>
