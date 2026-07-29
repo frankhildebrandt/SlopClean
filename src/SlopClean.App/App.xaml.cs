@@ -38,8 +38,6 @@ public partial class App : Application
             {
                 // ignore logging failures
             }
-
-            e.Handled = true;
         };
         Services = ConfigureServices();
     }

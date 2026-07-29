@@ -24,17 +24,10 @@ public partial class SettingsViewModel : ObservableObject
         try
         {
             SelectedTheme = _themeService.CurrentTheme.ToString();
-            SelectedLanguage = ApplicationLanguages.PrimaryLanguageOverride switch
-            {
-                "de-DE" => "Deutsch",
-                "en-US" => "English",
-                _ => "System"
-            };
-            BackupDirectory = _settingsStore.Current.BackupDirectory;
-            if (string.IsNullOrWhiteSpace(BackupDirectory))
-            {
-                BackupDirectory = AppSettings.DefaultBackupDirectory;
-            }
+            SelectedLanguage = NormalizeLanguage(_settingsStore.Current.Language);
+            BackupDirectory = string.IsNullOrWhiteSpace(_settingsStore.Current.BackupDirectory)
+                ? AppSettings.DefaultBackupDirectory
+                : _settingsStore.Current.BackupDirectory;
         }
         finally
         {
@@ -59,17 +52,23 @@ public partial class SettingsViewModel : ObservableObject
 
     public async Task LoadAsync()
     {
+        _suppressSideEffects = true;
         try
         {
             var settings = await _settingsStore.LoadAsync();
             BackupDirectory = string.IsNullOrWhiteSpace(settings.BackupDirectory)
                 ? AppSettings.DefaultBackupDirectory
                 : settings.BackupDirectory;
+            SelectedLanguage = NormalizeLanguage(settings.Language);
         }
         catch (Exception ex)
         {
             BackupDirectory = AppSettings.DefaultBackupDirectory;
             StatusText = $"Failed to load settings: {ex.Message}";
+        }
+        finally
+        {
+            _suppressSideEffects = false;
         }
     }
 
@@ -94,13 +93,38 @@ public partial class SettingsViewModel : ObservableObject
             return;
         }
 
-        ApplicationLanguages.PrimaryLanguageOverride = value switch
+        _ = PersistLanguageAsync(value);
+    }
+
+    private async Task PersistLanguageAsync(string value)
+    {
+        try
         {
-            "Deutsch" => "de-DE",
-            "English" => "en-US",
-            _ => string.Empty
-        };
-        StatusText = "Language will fully apply after restart.";
+            var settings = _settingsStore.Current;
+            settings.Language = NormalizeLanguage(value);
+            await _settingsStore.SaveAsync(settings);
+
+            // Unpackaged WinUI may reject ApplicationLanguages; keep our setting regardless.
+            try
+            {
+                ApplicationLanguages.PrimaryLanguageOverride = value switch
+                {
+                    "Deutsch" => "de-DE",
+                    "English" => "en-US",
+                    _ => string.Empty
+                };
+            }
+            catch
+            {
+                // Resource context override is optional for unpackaged builds.
+            }
+
+            StatusText = "Language saved. Restart the app to apply UI strings.";
+        }
+        catch (Exception ex)
+        {
+            StatusText = $"Failed to save language: {ex.Message}";
+        }
     }
 
     [RelayCommand]
@@ -198,4 +222,12 @@ public partial class SettingsViewModel : ObservableObject
             UseShellExecute = true
         });
     }
+
+    private static string NormalizeLanguage(string? value)
+        => value switch
+        {
+            "Deutsch" or "de-DE" => "Deutsch",
+            "English" or "en-US" => "English",
+            _ => "System"
+        };
 }

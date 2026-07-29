@@ -94,5 +94,9 @@ public sealed class AppSettingsStore : IAppSettingsStore
     }
 
     private static AppSettings Clone(AppSettings settings)
-        => new() { BackupDirectory = settings.BackupDirectory };
+        => new()
+        {
+            BackupDirectory = settings.BackupDirectory,
+            Language = string.IsNullOrWhiteSpace(settings.Language) ? "System" : settings.Language
+        };
 }
