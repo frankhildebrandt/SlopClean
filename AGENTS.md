@@ -120,9 +120,11 @@ Never set `requireAdministrator` on the WinUI app.
 
 ## Test-driven development (TDD)
 
-**Required workflow for new behavior and bug fixes:**
+TDD applies to **new behavior and bug fixes**. Bug fixes must land with a failing regression test first so the same defect cannot return unnoticed.
 
-1. **Red** — Write or update a failing test that describes the desired behavior.
+**Required workflow:**
+
+1. **Red** — Write or update a failing test that describes the desired behavior (for bugs: a regression test that reproduces the failure).
 2. **Green** — Implement the minimal production change to pass.
 3. **Refactor** — Clean up with tests still green.
 
@@ -140,7 +142,7 @@ Never set `requireAdministrator` on the WinUI app.
 - SafetyPolicy rules are tested first; modules must not bypass the policy.
 - Prefer fakes implementing Core abstractions over mocking frameworks for filesystem/registry.
 - Do not “fix” by manually deleting real system paths in CI.
-- When a bug is found (e.g. System32 delete incorrectly allowed), add a regression test **before** fixing.
+- **Bug fixes are TDD too:** when a bug is found (e.g. System32 delete incorrectly allowed), add a regression test that fails **before** fixing; do not ship a fix without that guard.
 
 ### Commands
 
