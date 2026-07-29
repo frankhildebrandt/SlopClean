@@ -73,8 +73,24 @@ public sealed class WindowsRegistryStore : IRegistryStore
 
         using var process = System.Diagnostics.Process.Start(start)
             ?? throw new InvalidOperationException("Failed to start reg.exe.");
-        var error = process.StandardError.ReadToEnd();
-        process.WaitForExit();
+
+        // Read stderr before/while waiting; never WaitForExit forever on a stuck reg.exe.
+        var errorTask = process.StandardError.ReadToEndAsync();
+        if (!process.WaitForExit(30_000))
+        {
+            try
+            {
+                process.Kill(entireProcessTree: true);
+            }
+            catch
+            {
+                // ignored
+            }
+
+            throw new InvalidOperationException($"Registry export timed out for '{full}'.");
+        }
+
+        var error = errorTask.GetAwaiter().GetResult();
         if (process.ExitCode != 0)
         {
             throw new InvalidOperationException($"Registry export failed: {error}");

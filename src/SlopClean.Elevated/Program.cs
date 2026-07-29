@@ -22,46 +22,58 @@ var safety = new SafetyPolicy(fileSystem);
 try
 {
     await using var client = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
-    await client.ConnectAsync(10_000).ConfigureAwait(false);
+    // UI process may still be setting up the server after UAC; allow a longer connect window.
+    await client.ConnectAsync(60_000).ConfigureAwait(false);
 
-    var lengthBuffer = new byte[sizeof(int)];
-    await ReadExactAsync(client, lengthBuffer).ConfigureAwait(false);
-    var requestLength = BitConverter.ToInt32(lengthBuffer, 0);
-    if (requestLength is < 0 or > 1_000_000)
+    while (true)
     {
-        return 2;
-    }
+        var lengthBuffer = new byte[sizeof(int)];
+        await ReadExactAsync(client, lengthBuffer).ConfigureAwait(false);
+        var requestLength = BitConverter.ToInt32(lengthBuffer, 0);
+        if (requestLength == 0)
+        {
+            return 0;
+        }
 
-    var requestBuffer = new byte[requestLength];
-    await ReadExactAsync(client, requestBuffer).ConfigureAwait(false);
-    var request = JsonSerializer.Deserialize<ElevatedRequest>(Encoding.UTF8.GetString(requestBuffer));
-    if (request?.Action is null || string.IsNullOrWhiteSpace(request.Nonce))
-    {
-        return 3;
-    }
+        if (requestLength is < 0 or > 1_000_000)
+        {
+            return 2;
+        }
 
-    if (!PrivilegedOperationCodes.All.Contains(request.Action.OperationCode))
-    {
-        await WriteResponseAsync(client, request.Nonce, ApplyResult.Failed(
-            request.Action.Id,
-            request.Action.FindingId,
-            "Operation code is not allowed.")).ConfigureAwait(false);
-        return 4;
-    }
+        var requestBuffer = new byte[requestLength];
+        await ReadExactAsync(client, requestBuffer).ConfigureAwait(false);
+        var request = JsonSerializer.Deserialize<ElevatedRequest>(Encoding.UTF8.GetString(requestBuffer));
+        if (request?.Action is null || string.IsNullOrWhiteSpace(request.Nonce))
+        {
+            return 3;
+        }
 
-    var validation = safety.ValidateAction(request.Action);
-    if (!validation.IsAllowed)
-    {
-        await WriteResponseAsync(client, request.Nonce, ApplyResult.Skipped(
-            request.Action.Id,
-            request.Action.FindingId,
-            validation.Reason ?? "Blocked by safety policy.")).ConfigureAwait(false);
-        return 0;
-    }
+        ApplyResult result;
+        if (!PrivilegedOperationCodes.All.Contains(request.Action.OperationCode))
+        {
+            result = ApplyResult.Failed(
+                request.Action.Id,
+                request.Action.FindingId,
+                "Operation code is not allowed.");
+        }
+        else
+        {
+            var validation = safety.ValidateAction(request.Action);
+            if (!validation.IsAllowed)
+            {
+                result = ApplyResult.Skipped(
+                    request.Action.Id,
+                    request.Action.FindingId,
+                    validation.Reason ?? "Blocked by safety policy.");
+            }
+            else
+            {
+                result = Execute(request.Action, fileSystem, registry, recycleBin);
+            }
+        }
 
-    var result = Execute(request.Action, fileSystem, registry, recycleBin);
-    await WriteResponseAsync(client, request.Nonce, result).ConfigureAwait(false);
-    return 0;
+        await WriteResponseAsync(client, request.Nonce, result).ConfigureAwait(false);
+    }
 }
 catch (Exception ex)
 {

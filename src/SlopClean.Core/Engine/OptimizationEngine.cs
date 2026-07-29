@@ -125,69 +125,121 @@ public sealed class OptimizationEngine
         var list = actions.ToArray();
         var results = new List<ApplyResult>(list.Length);
         var completed = 0;
+        var elevated = new ElevatedSessionState();
 
-        foreach (var action in list)
+        try
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            string? displayName = null;
-            displayNames?.TryGetValue(action.Id, out displayName);
-            displayName ??= action.Path ?? action.FindingId;
-
-            progress?.Report(new ApplyProgress(
-                action.Id,
-                action.FindingId,
-                displayName,
-                ApplyItemState.Running,
-                completed,
-                list.Length,
-                action.RequiredPrivilege == RequiredPrivilege.Elevated
-                    ? "Working (may prompt for admin)…"
-                    : "Working…"));
-
-            ApplyResult result;
-            try
+            foreach (var action in list)
             {
-                result = await ApplyOneAsync(action, displayName, cancellationToken).ConfigureAwait(false);
-            }
-            catch (OperationCanceledException)
-            {
+                cancellationToken.ThrowIfCancellationRequested();
+                string? displayName = null;
+                displayNames?.TryGetValue(action.Id, out displayName);
+                displayName ??= action.Path ?? action.FindingId;
+
+                var needsElevation = action.RequiredPrivilege == RequiredPrivilege.Elevated;
                 progress?.Report(new ApplyProgress(
                     action.Id,
                     action.FindingId,
                     displayName,
-                    ApplyItemState.Cancelled,
+                    ApplyItemState.Running,
                     completed,
                     list.Length,
-                    "Cancelled"));
-                throw;
-            }
+                    needsElevation
+                        ? elevated.Session is null && elevated.Error is null
+                            ? "Preparing backup, then one admin prompt for all elevated tasks…"
+                            : "Working (elevated)…"
+                        : "Working…"));
 
-            completed++;
-            var state = result.Outcome switch
+                ApplyResult result;
+                try
+                {
+                    result = await ApplyOneAsync(
+                            action,
+                            displayName,
+                            elevated,
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                    progress?.Report(new ApplyProgress(
+                        action.Id,
+                        action.FindingId,
+                        displayName,
+                        ApplyItemState.Cancelled,
+                        completed,
+                        list.Length,
+                        "Cancelled"));
+                    throw;
+                }
+
+                completed++;
+                var state = result.Outcome switch
+                {
+                    ApplyOutcome.Succeeded => ApplyItemState.Succeeded,
+                    ApplyOutcome.Skipped => ApplyItemState.Skipped,
+                    _ => ApplyItemState.Failed
+                };
+                progress?.Report(new ApplyProgress(
+                    action.Id,
+                    action.FindingId,
+                    displayName,
+                    state,
+                    completed,
+                    list.Length,
+                    result.Message,
+                    result.BytesFreed,
+                    result.RestoreTokenId));
+                results.Add(result);
+            }
+        }
+        finally
+        {
+            if (elevated.Session is not null)
             {
-                ApplyOutcome.Succeeded => ApplyItemState.Succeeded,
-                ApplyOutcome.Skipped => ApplyItemState.Skipped,
-                _ => ApplyItemState.Failed
-            };
-            progress?.Report(new ApplyProgress(
-                action.Id,
-                action.FindingId,
-                displayName,
-                state,
-                completed,
-                list.Length,
-                result.Message,
-                result.BytesFreed,
-                result.RestoreTokenId));
-            results.Add(result);
+                await elevated.Session.DisposeAsync().ConfigureAwait(false);
+            }
         }
 
         return results;
     }
 
+    private async Task<IElevatedPrivilegeSession?> EnsureElevatedSessionAsync(
+        ElevatedSessionState elevated,
+        CancellationToken cancellationToken)
+    {
+        if (elevated.Error is not null)
+        {
+            return null;
+        }
+
+        if (elevated.Session is not null)
+        {
+            return elevated.Session;
+        }
+
+        try
+        {
+            elevated.Session = await _privilegeBroker
+                .BeginElevatedSessionAsync(cancellationToken)
+                .ConfigureAwait(false);
+            return elevated.Session;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            elevated.Error = ex.Message;
+            return null;
+        }
+    }
+
     private async Task<ApplyResult> ApplyOneAsync(
         OptimizationAction action,
         string? displayName,
+        ElevatedSessionState elevated,
         CancellationToken cancellationToken)
     {
         var validation = _safetyPolicy.ValidateAction(action);
@@ -210,7 +262,19 @@ public sealed class OptimizationEngine
             ApplyResult result;
             if (action.RequiredPrivilege == RequiredPrivilege.Elevated)
             {
-                result = await _privilegeBroker.ExecuteElevatedAsync(action, cancellationToken).ConfigureAwait(false);
+                var session = await EnsureElevatedSessionAsync(elevated, cancellationToken).ConfigureAwait(false);
+                if (session is null)
+                {
+                    result = ApplyResult.Failed(
+                        action.Id,
+                        action.FindingId,
+                        elevated.Error
+                        ?? "Administrator approval was cancelled or the elevated helper failed to start.");
+                }
+                else
+                {
+                    result = await session.ExecuteAsync(action, cancellationToken).ConfigureAwait(false);
+                }
             }
             else if (module is IApplicableModule applicable)
             {
@@ -258,6 +322,12 @@ public sealed class OptimizationEngine
     {
         var releaser = await _scheduler.AcquireAsync(driveHint, cancellationToken).ConfigureAwait(false);
         return new AsyncReleaser(releaser);
+    }
+
+    private sealed class ElevatedSessionState
+    {
+        public IElevatedPrivilegeSession? Session { get; set; }
+        public string? Error { get; set; }
     }
 
     private sealed class AsyncReleaser(IDisposable inner) : IAsyncDisposable

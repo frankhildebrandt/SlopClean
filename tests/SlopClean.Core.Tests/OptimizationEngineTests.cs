@@ -57,8 +57,44 @@ public class OptimizationEngineTests
         ], CancellationToken.None);
 
         Assert.True(broker.Called);
+        Assert.Equal(1, broker.SessionCount);
         Assert.Equal(ApplyOutcome.Succeeded, result[0].Outcome);
         Assert.False(module.Applied);
+    }
+
+    [Fact]
+    public async Task Apply_reuses_one_elevated_session_for_multiple_elevated_actions()
+    {
+        var fs = CreateFs();
+        var module = new DeletingModule(fs);
+        var broker = new FakeBroker();
+        var engine = CreateEngine(fs, module, broker);
+
+        fs.AddFile(@"C:\Windows\Temp\a.tmp", 10);
+        fs.AddFile(@"C:\Windows\Temp\b.tmp", 10);
+        var result = await engine.ApplySelectedAsync(
+        [
+            new OptimizationAction(
+                "a1",
+                module.Id,
+                "f1",
+                PrivilegedOperationCodes.DeleteFile,
+                @"C:\Windows\Temp\a.tmp",
+                @"C:\Windows\Temp",
+                RequiredPrivilege.Elevated),
+            new OptimizationAction(
+                "a2",
+                module.Id,
+                "f2",
+                PrivilegedOperationCodes.DeleteFile,
+                @"C:\Windows\Temp\b.tmp",
+                @"C:\Windows\Temp",
+                RequiredPrivilege.Elevated)
+        ], CancellationToken.None);
+
+        Assert.Equal(1, broker.SessionCount);
+        Assert.Equal(2, broker.ExecuteCount);
+        Assert.All(result, r => Assert.Equal(ApplyOutcome.Succeeded, r.Outcome));
     }
 
     [Fact]
@@ -225,11 +261,31 @@ public class OptimizationEngineTests
     private sealed class FakeBroker : IPrivilegeBroker
     {
         public bool Called { get; private set; }
+        public int SessionCount { get; private set; }
+        public int ExecuteCount { get; private set; }
 
-        public Task<ApplyResult> ExecuteElevatedAsync(OptimizationAction action, CancellationToken cancellationToken)
+        public async Task<ApplyResult> ExecuteElevatedAsync(OptimizationAction action, CancellationToken cancellationToken)
+        {
+            await using var session = await BeginElevatedSessionAsync(cancellationToken);
+            return await session.ExecuteAsync(action, cancellationToken);
+        }
+
+        public Task<IElevatedPrivilegeSession> BeginElevatedSessionAsync(CancellationToken cancellationToken)
         {
             Called = true;
-            return Task.FromResult(ApplyResult.Succeeded(action.Id, action.FindingId, 1, "elevated"));
+            SessionCount++;
+            return Task.FromResult<IElevatedPrivilegeSession>(new FakeSession(this));
+        }
+
+        private sealed class FakeSession(FakeBroker owner) : IElevatedPrivilegeSession
+        {
+            public Task<ApplyResult> ExecuteAsync(OptimizationAction action, CancellationToken cancellationToken)
+            {
+                owner.ExecuteCount++;
+                return Task.FromResult(ApplyResult.Succeeded(action.Id, action.FindingId, 1, "elevated"));
+            }
+
+            public ValueTask DisposeAsync() => ValueTask.CompletedTask;
         }
     }
 

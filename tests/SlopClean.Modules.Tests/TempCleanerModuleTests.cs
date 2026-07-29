@@ -105,6 +105,9 @@ public class TempCleanerModuleTests
 
     private sealed class NoBroker : IPrivilegeBroker
     {
+        public Task<IElevatedPrivilegeSession> BeginElevatedSessionAsync(CancellationToken cancellationToken)
+            => throw new InvalidOperationException("Elevation is not available in tests.");
+
         public Task<ApplyResult> ExecuteElevatedAsync(OptimizationAction action, CancellationToken cancellationToken)
             => Task.FromResult(ApplyResult.Failed(action.Id, action.FindingId, "not expected"));
     }
