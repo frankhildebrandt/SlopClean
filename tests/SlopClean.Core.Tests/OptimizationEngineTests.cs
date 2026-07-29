@@ -98,6 +98,57 @@ public class OptimizationEngineTests
     }
 
     [Fact]
+    public async Task Apply_sticky_elevated_session_failure_attempts_begin_exactly_once()
+    {
+        var fs = CreateFs();
+        var module = new DeletingModule(fs);
+        const string sticky = "Elevated helper failed to start (missing files or runtime). Path: 'x'.";
+        var broker = new FakeBroker(beginError: sticky);
+        var engine = CreateEngine(fs, module, broker);
+
+        fs.AddFile(@"C:\Windows\Temp\a.tmp", 10);
+        fs.AddFile(@"C:\Windows\Temp\b.tmp", 10);
+        fs.AddFile(@"C:\Users\Test\AppData\Local\Temp\c.tmp", 10);
+
+        var results = await engine.ApplySelectedAsync(
+        [
+            new OptimizationAction(
+                "a1",
+                module.Id,
+                "f1",
+                PrivilegedOperationCodes.DeleteFile,
+                @"C:\Windows\Temp\a.tmp",
+                @"C:\Windows\Temp",
+                RequiredPrivilege.Elevated),
+            new OptimizationAction(
+                "a2",
+                module.Id,
+                "f2",
+                PrivilegedOperationCodes.DeleteFile,
+                @"C:\Users\Test\AppData\Local\Temp\c.tmp",
+                @"C:\Users\Test\AppData\Local\Temp",
+                RequiredPrivilege.None),
+            new OptimizationAction(
+                "a3",
+                module.Id,
+                "f3",
+                PrivilegedOperationCodes.DeleteFile,
+                @"C:\Windows\Temp\b.tmp",
+                @"C:\Windows\Temp",
+                RequiredPrivilege.Elevated)
+        ], CancellationToken.None);
+
+        Assert.Equal(1, broker.SessionCount);
+        Assert.Equal(0, broker.ExecuteCount);
+        Assert.Equal(ApplyOutcome.Failed, results[0].Outcome);
+        Assert.Equal(sticky, results[0].Message);
+        Assert.Equal(ApplyOutcome.Succeeded, results[1].Outcome);
+        Assert.Equal(ApplyOutcome.Failed, results[2].Outcome);
+        Assert.Equal(sticky, results[2].Message);
+        Assert.True(module.Applied);
+    }
+
+    [Fact]
     public async Task Apply_commits_restore_point_only_on_success()
     {
         var fs = CreateFs();
@@ -258,7 +309,7 @@ public class OptimizationEngineTests
         }
     }
 
-    private sealed class FakeBroker : IPrivilegeBroker
+    private sealed class FakeBroker(string? beginError = null) : IPrivilegeBroker
     {
         public bool Called { get; private set; }
         public int SessionCount { get; private set; }
@@ -274,6 +325,11 @@ public class OptimizationEngineTests
         {
             Called = true;
             SessionCount++;
+            if (beginError is not null)
+            {
+                throw new InvalidOperationException(beginError);
+            }
+
             return Task.FromResult<IElevatedPrivilegeSession>(new FakeSession(this));
         }
 

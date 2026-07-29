@@ -11,3 +11,5 @@ Run before merging changes that touch driver delete/restore.
 - [ ] Apply orphan → export identity present → package removed; restore re-stages package
 - [ ] pnputil exit 3010 surfaces as reboot-required success in Clean Tasks
 - [ ] de-DE / en-US module name and description from `.resw`
+- [ ] Publish layout contains `elevated\SlopClean.Elevated.exe`; `elevated\SlopClean.Elevated.exe --self-test` exits 0
+- [ ] On a VM **without** a global .NET 10 runtime install: one elevated apply (prefer reversible HKLM startup, not mass driver delete) → single UAC → success

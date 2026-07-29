@@ -72,6 +72,10 @@ jobs:
             --self-contained true `
             -p:Platform=x64 `
             -o $out
+          $helper = Join-Path $out "elevated\SlopClean.Elevated.exe"
+          if (-not (Test-Path $helper)) { throw "Missing elevated helper at $helper" }
+          $p = Start-Process -FilePath $helper -ArgumentList "--self-test" -WorkingDirectory (Split-Path $helper) -Wait -PassThru -NoNewWindow
+          if ($p.ExitCode -ne 0) { throw "Elevated helper --self-test failed with exit $($p.ExitCode)" }
           $hash = (Get-FileHash "$out/SlopClean.App.exe" -Algorithm SHA256).Hash
           Set-Content -Path "artifacts/slopclean-win-x64.sha256.txt" -Value "SHA256 $hash  SlopClean.App.exe"
           if (Test-Path "artifacts/slopclean-win-x64.zip") { Remove-Item -Force "artifacts/slopclean-win-x64.zip" }

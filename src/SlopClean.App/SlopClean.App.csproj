@@ -57,17 +57,62 @@
     <ProjectReference Include="..\SlopClean.Elevated\SlopClean.Elevated.csproj" ReferenceOutputAssembly="false" />
   </ItemGroup>
 
-  <Target Name="CopyElevatedHelper" AfterTargets="Build;Publish">
+  <!--
+    Copy FDD helper into TargetDir\elevated\ early enough for FileWrites / IncrementalClean.
+    Publish path ships a self-contained helper into PublishDir\elevated\ (see PublishElevatedHelper).
+  -->
+  <Target Name="ResolveElevatedHelperOutput">
+    <MSBuild
+      Projects="$(MSBuildThisFileDirectory)..\SlopClean.Elevated\SlopClean.Elevated.csproj"
+      Targets="GetTargetPath"
+      Properties="Configuration=$(Configuration);Platform=$(Platform)">
+      <Output TaskParameter="TargetOutputs" ItemName="_ElevatedTargetPathItem" />
+    </MSBuild>
     <PropertyGroup>
-      <_ElevatedOut>$(MSBuildThisFileDirectory)..\SlopClean.Elevated\bin\$(Platform)\$(Configuration)\net10.0-windows10.0.19041.0\</_ElevatedOut>
+      <_ElevatedOut Condition="'@(_ElevatedTargetPathItem)' != ''">$([System.IO.Path]::GetDirectoryName('@(_ElevatedTargetPathItem)'))\</_ElevatedOut>
+      <_ElevatedOut Condition="'$(_ElevatedOut)' == '' or !Exists('$(_ElevatedOut)SlopClean.Elevated.exe')">$(MSBuildThisFileDirectory)..\SlopClean.Elevated\bin\$(Platform)\$(Configuration)\net10.0-windows10.0.19041.0\</_ElevatedOut>
       <_ElevatedOut Condition="!Exists('$(_ElevatedOut)SlopClean.Elevated.exe')">$(MSBuildThisFileDirectory)..\SlopClean.Elevated\bin\$(Configuration)\net10.0-windows10.0.19041.0\</_ElevatedOut>
-      <_CopyDest Condition="'$(PublishDir)' != ''">$(PublishDir)</_CopyDest>
-      <_CopyDest Condition="'$(PublishDir)' == ''">$(OutputPath)</_CopyDest>
+    </PropertyGroup>
+  </Target>
+
+  <Target Name="CopyElevatedHelper"
+          AfterTargets="CopyFilesToOutputDirectory"
+          BeforeTargets="_CleanRecordFileWrites"
+          DependsOnTargets="ResolveElevatedHelperOutput">
+    <PropertyGroup>
+      <_ElevatedDest>$(TargetDir)elevated\</_ElevatedDest>
     </PropertyGroup>
     <ItemGroup>
-      <_ElevatedFiles Include="$(_ElevatedOut)**\*.*" Condition="Exists('$(_ElevatedOut)SlopClean.Elevated.exe')" />
+      <_ElevatedSourceFiles Include="$(_ElevatedOut)*.*" Condition="Exists('$(_ElevatedOut)SlopClean.Elevated.exe')" />
     </ItemGroup>
-    <Copy SourceFiles="@(_ElevatedFiles)" DestinationFolder="$(_CopyDest)" SkipUnchangedFiles="true" Condition="'@(_ElevatedFiles)' != ''" />
+    <Error
+      Condition="!Exists('$(_ElevatedOut)SlopClean.Elevated.exe')"
+      Text="SlopClean.Elevated output not found. Build SlopClean.Elevated before the App (looked under '$(_ElevatedOut)')." />
+    <MakeDir Directories="$(_ElevatedDest)" />
+    <Copy
+      SourceFiles="@(_ElevatedSourceFiles)"
+      DestinationFolder="$(_ElevatedDest)"
+      SkipUnchangedFiles="false" />
+    <Error
+      Condition="!Exists('$(_ElevatedDest)SlopClean.Elevated.dll') or !Exists('$(_ElevatedDest)SlopClean.Elevated.exe')"
+      Text="Elevated helper incomplete under '$(_ElevatedDest)' (expected SlopClean.Elevated.exe and .dll)." />
+    <ItemGroup>
+      <FileWrites Include="@(_ElevatedSourceFiles->'$(_ElevatedDest)%(Filename)%(Extension)')" />
+    </ItemGroup>
+  </Target>
+
+  <Target Name="PublishElevatedHelper" AfterTargets="Publish">
+    <PropertyGroup>
+      <_ElevatedPublishDir>$(PublishDir)elevated\</_ElevatedPublishDir>
+    </PropertyGroup>
+    <MakeDir Directories="$(_ElevatedPublishDir)" />
+    <MSBuild
+      Projects="$(MSBuildThisFileDirectory)..\SlopClean.Elevated\SlopClean.Elevated.csproj"
+      Targets="Publish"
+      Properties="Configuration=$(Configuration);Platform=$(Platform);RuntimeIdentifier=win-x64;SelfContained=true;PublishDir=$(_ElevatedPublishDir);PublishSingleFile=false;PublishTrimmed=false" />
+    <Error
+      Condition="!Exists('$(_ElevatedPublishDir)SlopClean.Elevated.exe') or !Exists('$(_ElevatedPublishDir)SlopClean.Elevated.dll')"
+      Text="Self-contained elevated helper incomplete under '$(_ElevatedPublishDir)'." />
   </Target>
 </Project>
 

@@ -12,16 +12,41 @@ namespace SlopClean.Platform.Windows;
 
 public sealed class ElevatedPrivilegeBroker : IPrivilegeBroker
 {
-    private static readonly TimeSpan ConnectTimeout = TimeSpan.FromSeconds(90);
+    private static readonly TimeSpan DefaultConnectTimeout = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan DefaultPreflightTimeout = TimeSpan.FromSeconds(15);
 
     private readonly string _helperPath;
     private readonly bool _elevate;
+    private readonly Func<ProcessStartInfo, Process?> _startProcess;
+    private readonly TimeSpan _connectTimeout;
+    private readonly TimeSpan _preflightTimeout;
 
-    public ElevatedPrivilegeBroker(string? helperPath = null, bool elevate = true)
+    public ElevatedPrivilegeBroker(
+        string? helperPath = null,
+        bool elevate = true,
+        Func<ProcessStartInfo, Process?>? startProcess = null,
+        TimeSpan? connectTimeout = null,
+        TimeSpan? preflightTimeout = null)
     {
-        _helperPath = helperPath
-            ?? Path.Combine(AppContext.BaseDirectory, "SlopClean.Elevated.exe");
+        _helperPath = helperPath ?? ResolveDefaultHelperPath(AppContext.BaseDirectory);
         _elevate = elevate;
+        _startProcess = startProcess ?? (psi => Process.Start(psi));
+        _connectTimeout = connectTimeout ?? DefaultConnectTimeout;
+        _preflightTimeout = preflightTimeout ?? DefaultPreflightTimeout;
+    }
+
+    /// <summary>
+    /// Prefers <c>elevated\SlopClean.Elevated.exe</c> (self-contained publish layout), else flat beside the app.
+    /// </summary>
+    public static string ResolveDefaultHelperPath(string baseDirectory)
+    {
+        var nested = Path.Combine(baseDirectory, "elevated", "SlopClean.Elevated.exe");
+        if (File.Exists(nested))
+        {
+            return nested;
+        }
+
+        return Path.Combine(baseDirectory, "SlopClean.Elevated.exe");
     }
 
     public async Task<ApplyResult> ExecuteElevatedAsync(
@@ -55,6 +80,8 @@ public sealed class ElevatedPrivilegeBroker : IPrivilegeBroker
             throw new InvalidOperationException($"Elevated helper not found at '{_helperPath}'.");
         }
 
+        await RunPreflightAsync(cancellationToken).ConfigureAwait(false);
+
         var pipeName = $"SlopClean.Elevated.{Guid.NewGuid():N}";
         var sessionNonce = Guid.NewGuid().ToString("N");
 
@@ -64,20 +91,21 @@ public sealed class ElevatedPrivilegeBroker : IPrivilegeBroker
         Process? process = null;
         try
         {
-            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            timeoutCts.CancelAfter(_elevate ? ConnectTimeout : TimeSpan.FromSeconds(5));
-
-            var connectTask = server.WaitForConnectionAsync(timeoutCts.Token);
+            // Do not arm the connect timeout until Process.Start returns (UAC may block).
+            var connectTask = server.WaitForConnectionAsync(cancellationToken);
 
             try
             {
-                process = StartHelper(pipeName, sessionNonce);
+                process = StartHelper(pipeName, sessionNonce, elevate: _elevate);
             }
             catch (Win32Exception ex) when (ex.NativeErrorCode == 1223)
             {
                 await server.DisposeAsync().ConfigureAwait(false);
                 throw new InvalidOperationException("Administrator approval was cancelled.");
             }
+
+            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeoutCts.CancelAfter(_connectTimeout);
 
             await WaitForHelperConnectionAsync(connectTask, process, cancellationToken, timeoutCts.Token)
                 .ConfigureAwait(false);
@@ -94,6 +122,64 @@ public sealed class ElevatedPrivilegeBroker : IPrivilegeBroker
 
             await server.DisposeAsync().ConfigureAwait(false);
             throw;
+        }
+    }
+
+    private async Task RunPreflightAsync(CancellationToken cancellationToken)
+    {
+        var start = new ProcessStartInfo
+        {
+            FileName = _helperPath,
+            Arguments = "--self-test",
+            WorkingDirectory = Path.GetDirectoryName(_helperPath) ?? AppContext.BaseDirectory,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardError = true,
+            RedirectStandardOutput = true
+        };
+
+        Process process;
+        try
+        {
+            process = _startProcess(start)
+                ?? throw new InvalidOperationException(
+                    $"Elevated helper failed to start (missing files or runtime). Path: '{_helperPath}'.");
+        }
+        catch (Win32Exception ex)
+        {
+            throw new InvalidOperationException(
+                $"Elevated helper failed to start (missing files or runtime). Path: '{_helperPath}'. {ex.Message}");
+        }
+
+        try
+        {
+            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeoutCts.CancelAfter(_preflightTimeout);
+
+            string stderr;
+            try
+            {
+                var stderrTask = process.StandardError.ReadToEndAsync(timeoutCts.Token);
+                await process.WaitForExitAsync(timeoutCts.Token).ConfigureAwait(false);
+                stderr = await stderrTask.ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            {
+                TryKill(process);
+                throw new InvalidOperationException(
+                    $"Elevated helper failed to start (preflight timed out). Path: '{_helperPath}'.");
+            }
+
+            if (process.ExitCode != 0)
+            {
+                var detail = string.IsNullOrWhiteSpace(stderr) ? $"exit code {process.ExitCode}" : stderr.Trim();
+                throw new InvalidOperationException(
+                    $"Elevated helper failed to start (missing files or runtime). Path: '{_helperPath}'. {detail}");
+            }
+        }
+        finally
+        {
+            process.Dispose();
         }
     }
 
@@ -117,29 +203,34 @@ public sealed class ElevatedPrivilegeBroker : IPrivilegeBroker
 
         try
         {
-            await connectTask.ConfigureAwait(false);
+            await connectTask.WaitAsync(waitCancellation).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (!userCancellation.IsCancellationRequested)
         {
             throw new InvalidOperationException(
-                "Timed out waiting for elevated helper IPC ready message. "
-                + "Approve the UAC prompt if it is still open.");
+                "Timed out waiting for elevated helper IPC ready message after administrator approval.");
         }
     }
 
-    private Process StartHelper(string pipeName, string sessionNonce)
+    private Process StartHelper(string pipeName, string sessionNonce, bool elevate)
     {
         var start = new ProcessStartInfo
         {
             FileName = _helperPath,
             Arguments = $"--pipe \"{pipeName}\" --nonce \"{sessionNonce}\"",
             WorkingDirectory = Path.GetDirectoryName(_helperPath) ?? AppContext.BaseDirectory,
-            UseShellExecute = _elevate,
-            Verb = _elevate ? "runas" : string.Empty,
-            CreateNoWindow = !_elevate
+            UseShellExecute = elevate,
+            Verb = elevate ? "runas" : string.Empty,
+            CreateNoWindow = !elevate
         };
 
-        return Process.Start(start)
+        if (!elevate)
+        {
+            start.RedirectStandardError = true;
+            start.RedirectStandardOutput = true;
+        }
+
+        return _startProcess(start)
             ?? throw new InvalidOperationException("Failed to start elevated helper.");
     }
 

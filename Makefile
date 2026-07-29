@@ -71,6 +71,7 @@ ci: restore
 publish: build
 	@$(call MKDIR_P,$(ARTIFACTS_DIR))
 	dotnet publish $(APP_PROJECT) -c $(CONFIGURATION) -r $(RID) --self-contained true $(APP_PLATFORM_ARGS) -o $(PUBLISH_DIR)
+	"$(PUBLISH_DIR)/elevated/SlopClean.Elevated.exe" --self-test
 
 checksum: publish
 ifeq ($(OS),Windows_NT)

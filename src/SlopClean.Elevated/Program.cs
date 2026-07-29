@@ -7,6 +7,13 @@ using SlopClean.Core.Safety;
 using SlopClean.Platform.Windows;
 using static SlopClean.Platform.Windows.ElevatedPrivilegeBroker;
 
+if (args.Any(a => string.Equals(a, "--self-test", StringComparison.OrdinalIgnoreCase)))
+{
+    // Load managed dependency closure without opening a pipe.
+    _ = new SafetyPolicy(new WindowsFileSystem());
+    return 0;
+}
+
 if (!TryParseArgs(args, out var pipeName, out var sessionNonce))
 {
     Console.Error.WriteLine("Usage: SlopClean.Elevated --pipe <name> --nonce <nonce>");
