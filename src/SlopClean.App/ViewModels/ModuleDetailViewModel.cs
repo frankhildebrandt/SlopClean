@@ -133,7 +133,7 @@ public partial class ModuleDetailViewModel : ObservableObject
         Findings.Clear();
         StatusText = "Scanning…";
 
-        var values = Parameters.ToDictionary(p => p.Id, p => p.Value);
+        var values = Parameters.ToDictionary(p => p.Id, p => p.TypedValue);
         await _presets.SaveAsync(_module.Id, values, CancellationToken.None);
 
         try

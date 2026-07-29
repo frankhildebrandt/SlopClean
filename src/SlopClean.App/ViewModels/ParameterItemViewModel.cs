@@ -23,12 +23,23 @@ public partial class ParameterItemViewModel : ObservableObject
     [ObservableProperty]
     public partial object? Value { get; set; }
 
+    /// <summary>
+    /// Typed value suitable for <see cref="SlopClean.Core.Parameters.ParameterValidator"/>.
+    /// </summary>
+    public object? TypedValue => Parameter switch
+    {
+        BoolParameter => BoolValue,
+        IntParameter => IntValue,
+        EnumParameter => StringValue,
+        _ => Value
+    };
+
     public bool BoolValue
     {
         get => Value is true;
         set
         {
-            if (Value is true == value)
+            if (!IsBool || Value is true == value)
             {
                 return;
             }
@@ -39,9 +50,18 @@ public partial class ParameterItemViewModel : ObservableObject
 
     public int IntValue
     {
-        get => Value is int i ? i : Convert.ToInt32(Parameter.DefaultValue ?? 0);
+        get => Value is int i
+            ? i
+            : Value is long l
+                ? (int)l
+                : Convert.ToInt32(Parameter.DefaultValue ?? 0);
         set
         {
+            if (!IsInt)
+            {
+                return;
+            }
+
             if (Value is int current && current == value)
             {
                 return;
@@ -56,6 +76,11 @@ public partial class ParameterItemViewModel : ObservableObject
         get => Value?.ToString() ?? Parameter.DefaultValue?.ToString() ?? string.Empty;
         set
         {
+            if (!IsEnum)
+            {
+                return;
+            }
+
             var next = value ?? string.Empty;
             if (string.Equals(StringValue, next, StringComparison.Ordinal))
             {
@@ -72,5 +97,6 @@ public partial class ParameterItemViewModel : ObservableObject
         OnPropertyChanged(nameof(BoolValue));
         OnPropertyChanged(nameof(IntValue));
         OnPropertyChanged(nameof(StringValue));
+        OnPropertyChanged(nameof(TypedValue));
     }
 }

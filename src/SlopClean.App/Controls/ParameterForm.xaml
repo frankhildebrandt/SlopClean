@@ -23,21 +23,25 @@
                                 TextWrapping="Wrap"
                                 Text="{x:Bind Description}" />
                         </StackPanel>
+                        <!-- x:Load avoids collapsed NumberBox/ComboBox TwoWay bindings overwriting bool values. -->
                         <ToggleSwitch
+                            x:Name="BoolEditor"
                             Grid.Column="1"
-                            IsOn="{x:Bind BoolValue, Mode=TwoWay}"
-                            Visibility="{x:Bind IsBool, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
+                            x:Load="{x:Bind IsBool}"
+                            IsOn="{x:Bind BoolValue, Mode=TwoWay}" />
                         <NumberBox
+                            x:Name="IntEditor"
                             Grid.Column="1"
+                            x:Load="{x:Bind IsInt}"
                             Minimum="0"
                             SpinButtonPlacementMode="Inline"
-                            Value="{x:Bind IntValue, Mode=TwoWay}"
-                            Visibility="{x:Bind IsInt, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
+                            Value="{x:Bind IntValue, Mode=TwoWay}" />
                         <ComboBox
+                            x:Name="EnumEditor"
                             Grid.Column="1"
+                            x:Load="{x:Bind IsEnum}"
                             ItemsSource="{x:Bind EnumValues}"
-                            SelectedItem="{x:Bind StringValue, Mode=TwoWay}"
-                            Visibility="{x:Bind IsEnum, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
+                            SelectedItem="{x:Bind StringValue, Mode=TwoWay}" />
                     </Grid>
                 </DataTemplate>
             </ItemsRepeater.ItemTemplate>
