@@ -18,9 +18,19 @@ public sealed partial class ModuleDetailPage : Page
     protected override async void OnNavigatedTo(NavigationEventArgs e)
     {
         base.OnNavigatedTo(e);
-        if (e.Parameter is string moduleId)
+        if (e.Parameter is not string moduleId)
+        {
+            return;
+        }
+
+        try
         {
             await ViewModel.InitializeAsync(moduleId);
+        }
+        catch (Exception ex)
+        {
+            ViewModel.StatusText = $"Failed to open module: {ex.Message}";
+            System.Diagnostics.Debug.WriteLine(ex);
         }
     }
 }

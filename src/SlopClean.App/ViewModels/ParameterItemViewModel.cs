@@ -28,8 +28,12 @@ public partial class ParameterItemViewModel : ObservableObject
         get => Value is true;
         set
         {
+            if (Value is true == value)
+            {
+                return;
+            }
+
             Value = value;
-            OnPropertyChanged();
         }
     }
 
@@ -38,8 +42,12 @@ public partial class ParameterItemViewModel : ObservableObject
         get => Value is int i ? i : Convert.ToInt32(Parameter.DefaultValue ?? 0);
         set
         {
+            if (Value is int current && current == value)
+            {
+                return;
+            }
+
             Value = value;
-            OnPropertyChanged();
         }
     }
 
@@ -48,8 +56,21 @@ public partial class ParameterItemViewModel : ObservableObject
         get => Value?.ToString() ?? Parameter.DefaultValue?.ToString() ?? string.Empty;
         set
         {
-            Value = value;
-            OnPropertyChanged();
+            var next = value ?? string.Empty;
+            if (string.Equals(StringValue, next, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            Value = next;
         }
+    }
+
+    partial void OnValueChanged(object? value)
+    {
+        // Keep typed accessors in sync for x:Bind without re-entering TwoWay controls.
+        OnPropertyChanged(nameof(BoolValue));
+        OnPropertyChanged(nameof(IntValue));
+        OnPropertyChanged(nameof(StringValue));
     }
 }

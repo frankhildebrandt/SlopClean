@@ -53,7 +53,7 @@ public sealed class PresetStore
 
         await using var stream = File.OpenRead(path);
         var document = await JsonSerializer.DeserializeAsync<PresetDocument>(stream, JsonOptions, cancellationToken)
-            .ConfigureAwait(false);
+            .ConfigureAwait(true);
         return document?.Values;
     }
 

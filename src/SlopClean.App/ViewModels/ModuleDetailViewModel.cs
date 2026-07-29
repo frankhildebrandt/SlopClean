@@ -9,6 +9,7 @@ using SlopClean.App.Services;
 using SlopClean.Core.Engine;
 using SlopClean.Core.Models;
 using SlopClean.Core.Modules;
+using SlopClean.Core.Parameters;
 using SlopClean.Core.Planning;
 using SlopClean.Core.Presets;
 
@@ -66,13 +67,16 @@ public partial class ModuleDetailViewModel : ObservableObject
         Parameters.Clear();
         Findings.Clear();
 
-        var saved = await _presets.LoadAsync(moduleId, CancellationToken.None);
+        // Load off the UI thread, then apply on the captured dispatcher to avoid
+        // ObservableCollection updates after ConfigureAwait(false) inside PresetStore.
+        var saved = await _presets.LoadAsync(moduleId, CancellationToken.None).ConfigureAwait(true);
         foreach (var parameter in _module.Parameters)
         {
             var vm = new ParameterItemViewModel(parameter);
-            if (saved is not null && saved.TryGetValue(parameter.Id, out var value) && value is bool or int or string)
+            if (saved is not null && saved.TryGetValue(parameter.Id, out var value))
             {
-                vm.Value = value;
+                // JSON presets deserialize numbers as JsonElement/long — coerce safely.
+                vm.Value = CoercePresetValue(parameter, value);
             }
 
             Parameters.Add(vm);
@@ -80,6 +84,39 @@ public partial class ModuleDetailViewModel : ObservableObject
 
         CanReview = _module is IApplicableModule;
         StatusText = "Ready";
+    }
+
+    private static object? CoercePresetValue(IModuleParameter parameter, object? value)
+    {
+        if (value is null)
+        {
+            return parameter.DefaultValue;
+        }
+
+        if (parameter is BoolParameter)
+        {
+            return value switch
+            {
+                bool b => b,
+                string s when bool.TryParse(s, out var parsed) => parsed,
+                _ => parameter.DefaultValue
+            };
+        }
+
+        if (parameter is IntParameter)
+        {
+            return value switch
+            {
+                int i => i,
+                long l => (int)l,
+                double d => (int)d,
+                string s when int.TryParse(s, out var parsed) => parsed,
+                System.Text.Json.JsonElement je when je.TryGetInt32(out var parsed) => parsed,
+                _ => parameter.DefaultValue
+            };
+        }
+
+        return value is string or int or bool ? value : value.ToString();
     }
 
     [RelayCommand]

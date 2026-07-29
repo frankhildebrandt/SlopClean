@@ -33,6 +33,7 @@ public partial class App : Application
                 File.AppendAllText(
                     Path.Combine(logDirectory, "unhandled.log"),
                     $"{DateTimeOffset.Now:O} {e.Message}{Environment.NewLine}{e.Exception}{Environment.NewLine}");
+                e.Handled = true;
             }
             catch
             {
