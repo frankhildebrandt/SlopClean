@@ -60,6 +60,7 @@ public sealed class WindowsRegistryStore : IRegistryStore
         var full = $"{hiveName}\\{subKey}";
 
         // Use reg.exe for a faithful .reg export that reg import can restore.
+        // Do not redirect stdout+stderr together with WaitForExit — that deadlocks when buffers fill.
         var start = new System.Diagnostics.ProcessStartInfo
         {
             FileName = "reg.exe",
@@ -67,15 +68,15 @@ public sealed class WindowsRegistryStore : IRegistryStore
             UseShellExecute = false,
             CreateNoWindow = true,
             RedirectStandardError = true,
-            RedirectStandardOutput = true
+            RedirectStandardOutput = false
         };
 
         using var process = System.Diagnostics.Process.Start(start)
             ?? throw new InvalidOperationException("Failed to start reg.exe.");
+        var error = process.StandardError.ReadToEnd();
         process.WaitForExit();
         if (process.ExitCode != 0)
         {
-            var error = process.StandardError.ReadToEnd();
             throw new InvalidOperationException($"Registry export failed: {error}");
         }
 

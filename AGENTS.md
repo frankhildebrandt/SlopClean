@@ -87,8 +87,8 @@ Never set `requireAdministrator` on the WinUI app.
 - Shell and Pages stay thin (composition + navigation).
 - Prefer domain-sized reusable controls (`ParameterForm`, `FindingList`, `ModuleCard`, `ScanProgressControl`, `PlannedChangeList`, `RestorePointList`).
 - One generic `ModuleDetailPage` driven by module contracts — not seven giant per-module pages.
-- Apply is never on the module page: Scan → select → **Review selected** → `ReviewPlanPage` → Apply.
-- `Restore` nav lists committed backups; Settings configures the backup directory.
+- Apply is never on the module page: Scan → select → **Review selected** → `ReviewPlanPage` → **Start cleanup** → `CleanTasksPage` (todo-list progress).
+- `Clean Tasks` nav shows live/queued cleanup progress; `Restore` lists committed backups; Settings configures the backup directory.
 - Avoid micro-controls without a clear responsibility.
 - Large lists: virtualization / incremental results + cancellation.
 - UI strings: `.resw` (de-DE / en-US), not hard-coded sprawl in XAML.
@@ -159,5 +159,6 @@ GitHub Actions: `CI` (push), `PR` (pull requests), `Release` (tags `v*.*.*` / ma
 - Do not weaken SafetyPolicy for convenience.
 - Do not add ads, telemetry, or remote calls.
 - Match existing naming, DI registration patterns, and control-first UI structure.
+- When adding, replacing, or removing a product-facing runtime open-source dependency, update the About page credits (name, official project URL, license id, short excerpt in `de-DE` and `en-US` `.resw`). Do not list test- or build-only packages.
 - After substantive changes: run tests (and App build if UI/platform touched).
 - Commit only when the user asks; never force-push `main`.

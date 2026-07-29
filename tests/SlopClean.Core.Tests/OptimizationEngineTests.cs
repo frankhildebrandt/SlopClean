@@ -131,6 +131,46 @@ public class OptimizationEngineTests
     }
 
     [Fact]
+    public async Task ApplyPlan_reports_running_then_terminal_progress_per_item()
+    {
+        var fs = CreateFs();
+        fs.AddFile(@"C:\Users\Test\AppData\Local\Temp\a.tmp", 10);
+        fs.AddFile(@"C:\Users\Test\AppData\Local\Temp\b.tmp", 20);
+        var module = new DeletingModule(fs);
+        var engine = CreateEngine(fs, module, new FakeBroker());
+        var reports = new List<ApplyProgress>();
+        var progress = new Progress<ApplyProgress>(reports.Add);
+
+        var findings = new[]
+        {
+            new ScanFinding(
+                "f1", module.Id, "t", "a.tmp",
+                @"C:\Users\Test\AppData\Local\Temp\a.tmp", 10, FindingRisk.Low, "a",
+                true, RequiredPrivilege.None, @"C:\Users\Test\AppData\Local\Temp",
+                new Dictionary<string, string>
+                {
+                    [OptimizationAction.OperationCodeMetadataKey] = PrivilegedOperationCodes.DeleteFile
+                }),
+            new ScanFinding(
+                "f2", module.Id, "t", "b.tmp",
+                @"C:\Users\Test\AppData\Local\Temp\b.tmp", 20, FindingRisk.Low, "b",
+                true, RequiredPrivilege.None, @"C:\Users\Test\AppData\Local\Temp",
+                new Dictionary<string, string>
+                {
+                    [OptimizationAction.OperationCodeMetadataKey] = PrivilegedOperationCodes.DeleteFile
+                })
+        };
+        var plan = OptimizationPlan.FromFindings(module.Id, module.Name, findings);
+        var results = await engine.ApplyPlanAsync(plan, progress, CancellationToken.None);
+
+        Assert.Equal(2, results.Count);
+        Assert.Contains(reports, r => r.DisplayName == "a.tmp" && r.State == ApplyItemState.Running);
+        Assert.Contains(reports, r => r.DisplayName == "a.tmp" && r.State == ApplyItemState.Succeeded);
+        Assert.Contains(reports, r => r.DisplayName == "b.tmp" && r.State == ApplyItemState.Succeeded);
+        Assert.Equal(2, reports.Last(r => r.State == ApplyItemState.Succeeded).CompletedCount);
+    }
+
+    [Fact]
     public async Task Scan_is_cancelled_when_token_cancelled()
     {
         var fs = CreateFs();

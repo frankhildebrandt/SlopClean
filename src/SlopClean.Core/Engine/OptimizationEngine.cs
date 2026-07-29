@@ -88,16 +88,22 @@ public sealed class OptimizationEngine
     public Task<IReadOnlyList<ApplyResult>> ApplySelectedAsync(
         IEnumerable<OptimizationAction> actions,
         CancellationToken cancellationToken)
-        => ApplyActionsAsync(actions, displayNames: null, cancellationToken);
+        => ApplyActionsAsync(actions, displayNames: null, progress: null, cancellationToken);
 
     public Task<IReadOnlyList<ApplyResult>> ApplyPlanAsync(
         OptimizationPlan plan,
+        CancellationToken cancellationToken)
+        => ApplyPlanAsync(plan, progress: null, cancellationToken);
+
+    public Task<IReadOnlyList<ApplyResult>> ApplyPlanAsync(
+        OptimizationPlan plan,
+        IProgress<ApplyProgress>? progress,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(plan);
         var actions = plan.Changes.Select(c => c.Action);
         var names = plan.Changes.ToDictionary(c => c.Action.Id, c => c.DisplayName);
-        return ApplyActionsAsync(actions, names, cancellationToken);
+        return ApplyActionsAsync(actions, names, progress, cancellationToken);
     }
 
     public async Task<ApplyResult> RestoreAsync(string restoreId, CancellationToken cancellationToken)
@@ -113,15 +119,67 @@ public sealed class OptimizationEngine
     private async Task<IReadOnlyList<ApplyResult>> ApplyActionsAsync(
         IEnumerable<OptimizationAction> actions,
         IReadOnlyDictionary<string, string>? displayNames,
+        IProgress<ApplyProgress>? progress,
         CancellationToken cancellationToken)
     {
-        var results = new List<ApplyResult>();
-        foreach (var action in actions)
+        var list = actions.ToArray();
+        var results = new List<ApplyResult>(list.Length);
+        var completed = 0;
+
+        foreach (var action in list)
         {
             cancellationToken.ThrowIfCancellationRequested();
             string? displayName = null;
             displayNames?.TryGetValue(action.Id, out displayName);
-            results.Add(await ApplyOneAsync(action, displayName, cancellationToken).ConfigureAwait(false));
+            displayName ??= action.Path ?? action.FindingId;
+
+            progress?.Report(new ApplyProgress(
+                action.Id,
+                action.FindingId,
+                displayName,
+                ApplyItemState.Running,
+                completed,
+                list.Length,
+                action.RequiredPrivilege == RequiredPrivilege.Elevated
+                    ? "Working (may prompt for admin)…"
+                    : "Working…"));
+
+            ApplyResult result;
+            try
+            {
+                result = await ApplyOneAsync(action, displayName, cancellationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                progress?.Report(new ApplyProgress(
+                    action.Id,
+                    action.FindingId,
+                    displayName,
+                    ApplyItemState.Cancelled,
+                    completed,
+                    list.Length,
+                    "Cancelled"));
+                throw;
+            }
+
+            completed++;
+            var state = result.Outcome switch
+            {
+                ApplyOutcome.Succeeded => ApplyItemState.Succeeded,
+                ApplyOutcome.Skipped => ApplyItemState.Skipped,
+                _ => ApplyItemState.Failed
+            };
+            progress?.Report(new ApplyProgress(
+                action.Id,
+                action.FindingId,
+                displayName,
+                state,
+                completed,
+                list.Length,
+                result.Message,
+                result.BytesFreed,
+                result.RestoreTokenId));
+            results.Add(result);
         }
 
         return results;

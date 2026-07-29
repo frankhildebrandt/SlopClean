@@ -2,29 +2,27 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
+using SlopClean.App.Pages;
 using SlopClean.App.Services;
-using SlopClean.Core.Engine;
-using SlopClean.Core.Models;
 using SlopClean.Core.Planning;
 
 namespace SlopClean.App.ViewModels;
 
 public partial class ReviewPlanViewModel : ObservableObject
 {
-    private readonly OptimizationEngine _engine;
     private readonly IOptimizationPlanSession _planSession;
+    private readonly ICleanTaskSession _cleanTasks;
     private readonly INavigationService _navigation;
     private readonly ILogger<ReviewPlanViewModel> _logger;
-    private CancellationTokenSource? _cts;
 
     public ReviewPlanViewModel(
-        OptimizationEngine engine,
         IOptimizationPlanSession planSession,
+        ICleanTaskSession cleanTasks,
         INavigationService navigation,
         ILogger<ReviewPlanViewModel> logger)
     {
-        _engine = engine;
         _planSession = planSession;
+        _cleanTasks = cleanTasks;
         _navigation = navigation;
         _logger = logger;
     }
@@ -41,10 +39,7 @@ public partial class ReviewPlanViewModel : ObservableObject
     public partial string StatusText { get; set; } = "";
 
     [ObservableProperty]
-    public partial bool IsBusy { get; set; }
-
-    [ObservableProperty]
-    public partial bool CanApply { get; set; }
+    public partial bool CanStartCleanup { get; set; }
 
     public void Load()
     {
@@ -55,7 +50,7 @@ public partial class ReviewPlanViewModel : ObservableObject
             Title = "Review planned changes";
             SummaryText = "No planned changes.";
             StatusText = "Go back and select items to review.";
-            CanApply = false;
+            CanStartCleanup = false;
             return;
         }
 
@@ -67,54 +62,46 @@ public partial class ReviewPlanViewModel : ObservableObject
 
         SummaryText =
             $"{plan.Changes.Count} change(s), {FormatBytes(plan.TotalSizeBytes)} total, {plan.RestorableCount} with backup.";
-        StatusText = "Review the planned changes, then apply.";
-        CanApply = true;
+        StatusText = _cleanTasks.IsRunning
+            ? "A cleanup is already running. Open Clean Tasks to watch progress."
+            : "Review the planned changes, then start cleanup on the Clean Tasks page.";
+        CanStartCleanup = !_cleanTasks.IsRunning;
     }
 
     [RelayCommand]
-    private async Task ApplyPlanAsync()
+    private void StartCleanup()
     {
         var plan = _planSession.Current;
         if (plan is null || plan.Changes.Count == 0)
         {
-            StatusText = "No planned changes to apply.";
+            StatusText = "No planned changes to run.";
             return;
         }
 
-        _cts?.Cancel();
-        _cts = new CancellationTokenSource();
-        IsBusy = true;
-        CanApply = false;
-        StatusText = "Applying…";
+        if (_cleanTasks.IsRunning)
+        {
+            StatusText = "A cleanup is already running.";
+            _navigation.Navigate(typeof(CleanTasksPage));
+            return;
+        }
 
         try
         {
-            var results = await _engine.ApplyPlanAsync(plan, _cts.Token);
-            var succeeded = results.Count(r => r.Outcome == ApplyOutcome.Succeeded);
-            var freed = results.Sum(r => r.BytesFreed);
-            var backedUp = results.Count(r => !string.IsNullOrWhiteSpace(r.RestoreTokenId));
-            StatusText = $"Done — {succeeded}/{results.Count} succeeded, freed {FormatBytes(freed)}, {backedUp} backup(s).";
+            _cleanTasks.QueuePlan(plan);
             _planSession.Clear();
-        }
-        catch (OperationCanceledException)
-        {
-            StatusText = "Apply cancelled";
-            CanApply = true;
+            CanStartCleanup = false;
+            StatusText = "Queued on Clean Tasks…";
+            _navigation.Navigate(typeof(CleanTasksPage));
+            // Fire-and-forget: run off the UI thread inside CleanTaskSession.
+            _ = _cleanTasks.StartAsync();
         }
         catch (Exception ex)
         {
-            StatusText = $"Apply failed: {ex.Message}";
-            CanApply = true;
-            _logger.LogError(ex, "Apply plan failed for {ModuleId}", plan.ModuleId);
-        }
-        finally
-        {
-            IsBusy = false;
+            StatusText = $"Failed to start cleanup: {ex.Message}";
+            CanStartCleanup = true;
+            _logger.LogError(ex, "Failed to queue cleanup for {ModuleId}", plan.ModuleId);
         }
     }
-
-    [RelayCommand]
-    private void Cancel() => _cts?.Cancel();
 
     [RelayCommand]
     private void Back() => _navigation.GoBack();

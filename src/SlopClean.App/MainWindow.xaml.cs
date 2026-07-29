@@ -41,6 +41,10 @@ public sealed partial class MainWindow : Window
         {
             SelectTag("modules");
         }
+        else if (e.SourcePageType == typeof(CleanTasksPage))
+        {
+            SelectTag("clean-tasks");
+        }
         else if (e.SourcePageType == typeof(RestorePage))
         {
             SelectTag("restore");
@@ -85,6 +89,9 @@ public sealed partial class MainWindow : Window
                 break;
             case "modules":
                 _navigation.Navigate(typeof(ModulesPage));
+                break;
+            case "clean-tasks":
+                _navigation.Navigate(typeof(CleanTasksPage));
                 break;
             case "restore":
                 _navigation.Navigate(typeof(RestorePage));

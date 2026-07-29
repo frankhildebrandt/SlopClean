@@ -38,42 +38,76 @@ public sealed class ElevatedPrivilegeBroker : IPrivilegeBroker
 
         await using var server = CreateServer(pipeName);
         using var process = StartElevated(pipeName);
-        await server.WaitForConnectionAsync(cancellationToken).ConfigureAwait(false);
-
-        var payload = JsonSerializer.Serialize(request);
-        var bytes = Encoding.UTF8.GetBytes(payload);
-        await server.WriteAsync(BitConverter.GetBytes(bytes.Length), cancellationToken).ConfigureAwait(false);
-        await server.WriteAsync(bytes, cancellationToken).ConfigureAwait(false);
-
-        var lengthBuffer = new byte[sizeof(int)];
-        await ReadExactAsync(server, lengthBuffer, cancellationToken).ConfigureAwait(false);
-        var responseLength = BitConverter.ToInt32(lengthBuffer, 0);
-        if (responseLength is < 0 or > 1_000_000)
+        try
         {
-            return ApplyResult.Failed(action.Id, action.FindingId, "Invalid elevated helper response.");
-        }
+            await server.WaitForConnectionAsync(cancellationToken).ConfigureAwait(false);
 
-        var responseBuffer = new byte[responseLength];
-        await ReadExactAsync(server, responseBuffer, cancellationToken).ConfigureAwait(false);
-        var response = JsonSerializer.Deserialize<ElevatedResponse>(Encoding.UTF8.GetString(responseBuffer));
-        if (response is null || !string.Equals(response.Nonce, nonce, StringComparison.Ordinal))
+            var payload = JsonSerializer.Serialize(request);
+            var bytes = Encoding.UTF8.GetBytes(payload);
+            await server.WriteAsync(BitConverter.GetBytes(bytes.Length), cancellationToken).ConfigureAwait(false);
+            await server.WriteAsync(bytes, cancellationToken).ConfigureAwait(false);
+
+            var lengthBuffer = new byte[sizeof(int)];
+            await ReadExactAsync(server, lengthBuffer, cancellationToken).ConfigureAwait(false);
+            var responseLength = BitConverter.ToInt32(lengthBuffer, 0);
+            if (responseLength is < 0 or > 1_000_000)
+            {
+                return ApplyResult.Failed(action.Id, action.FindingId, "Invalid elevated helper response.");
+            }
+
+            var responseBuffer = new byte[responseLength];
+            await ReadExactAsync(server, responseBuffer, cancellationToken).ConfigureAwait(false);
+            var response = JsonSerializer.Deserialize<ElevatedResponse>(Encoding.UTF8.GetString(responseBuffer));
+            if (response is null || !string.Equals(response.Nonce, nonce, StringComparison.Ordinal))
+            {
+                return ApplyResult.Failed(action.Id, action.FindingId, "Elevated helper nonce validation failed.");
+            }
+
+            try
+            {
+                if (!process.HasExited)
+                {
+                    using var exitCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                    exitCts.CancelAfter(TimeSpan.FromSeconds(5));
+                    await process.WaitForExitAsync(exitCts.Token).ConfigureAwait(false);
+                }
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            {
+                TryKill(process);
+            }
+            catch (OperationCanceledException)
+            {
+                TryKill(process);
+                throw;
+            }
+            catch
+            {
+                // ignored
+            }
+
+            return response.Result ?? ApplyResult.Failed(action.Id, action.FindingId, "Empty elevated result.");
+        }
+        catch (OperationCanceledException)
         {
-            return ApplyResult.Failed(action.Id, action.FindingId, "Elevated helper nonce validation failed.");
+            TryKill(process);
+            throw;
         }
+    }
 
+    private static void TryKill(Process process)
+    {
         try
         {
             if (!process.HasExited)
             {
-                process.WaitForExit(5000);
+                process.Kill(entireProcessTree: true);
             }
         }
         catch
         {
             // ignored
         }
-
-        return response.Result ?? ApplyResult.Failed(action.Id, action.FindingId, "Empty elevated result.");
     }
 
     private static NamedPipeServerStream CreateServer(string pipeName)

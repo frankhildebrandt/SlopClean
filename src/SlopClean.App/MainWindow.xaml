@@ -45,6 +45,11 @@
                         <FontIcon Glyph="&#xE74C;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
+                <NavigationViewItem Content="Clean Tasks" Tag="clean-tasks">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE9D5;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
                 <NavigationViewItem Content="Restore" Tag="restore">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE777;" />

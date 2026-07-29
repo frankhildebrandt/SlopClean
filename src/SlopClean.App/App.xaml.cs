@@ -79,10 +79,12 @@ public partial class App : Application
         services.AddSingleton<SafetyPolicy>();
         services.AddSingleton<ThemeService>();
         services.AddSingleton<INavigationService, NavigationService>();
+        services.AddSingleton<ICleanTaskSession, CleanTaskSession>();
         services.AddSingleton<MainWindow>();
         services.AddTransient<DashboardViewModel>();
         services.AddTransient<ModuleDetailViewModel>();
         services.AddTransient<ReviewPlanViewModel>();
+        services.AddSingleton<CleanTasksViewModel>();
         services.AddTransient<RestoreViewModel>();
         services.AddTransient<SettingsViewModel>();
         return services.BuildServiceProvider();
