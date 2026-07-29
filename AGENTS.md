@@ -169,3 +169,4 @@ GitHub Actions: `CI` (push), `PR` (pull requests), `Release` (tags `v*.*.*` / ma
 - When adding, replacing, or removing a product-facing runtime open-source dependency, update the About page credits (name, official project URL, license id, short excerpt in `de-DE` and `en-US` `.resw`). Do not list test- or build-only packages.
 - After substantive changes: run tests (and App build if UI/platform touched).
 - Commit only when the user asks; never force-push `main`.
+- **Plan mode language:** Plans produced in plan mode must always be written in English (titles, sections, todos, trade-off notes). Follow this even when the user requests changes or asks questions in another language. Chat replies outside the plan artifact may still match the user's language.
