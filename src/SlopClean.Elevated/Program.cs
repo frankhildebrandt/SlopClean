@@ -21,22 +21,14 @@ var safety = new SafetyPolicy(fileSystem);
 
 try
 {
-    // Helper owns the pipe server and sends the first IPC frame (ready). The UI connects as client.
-    await using var server = NamedPipeServerStreamAcl.Create(
+    // UI process owns the pipe server (medium IL). We connect as elevated client and send ready first.
+    await using var client = new NamedPipeClientStream(
+        ".",
         pipeName,
         PipeDirection.InOut,
-        1,
-        PipeTransmissionMode.Byte,
-        PipeOptions.Asynchronous,
-        0,
-        0,
-        CreatePipeSecurity());
+        PipeOptions.Asynchronous);
 
-    // Allow the medium-IL UI process to connect to this high-IL pipe.
-    PipeIntegrity.SetLowMandatoryLabel(server.SafePipeHandle);
-
-    using var connectCts = new CancellationTokenSource(TimeSpan.FromSeconds(60));
-    await server.WaitForConnectionAsync(connectCts.Token).ConfigureAwait(false);
+    await client.ConnectAsync(60_000).ConfigureAwait(false);
 
     var ready = new ElevatedReady
     {
@@ -45,14 +37,14 @@ try
         Pid = Environment.ProcessId
     };
     var readyBytes = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(ready));
-    await server.WriteAsync(BitConverter.GetBytes(readyBytes.Length)).ConfigureAwait(false);
-    await server.WriteAsync(readyBytes).ConfigureAwait(false);
-    await server.FlushAsync().ConfigureAwait(false);
+    await client.WriteAsync(BitConverter.GetBytes(readyBytes.Length)).ConfigureAwait(false);
+    await client.WriteAsync(readyBytes).ConfigureAwait(false);
+    await client.FlushAsync().ConfigureAwait(false);
 
     while (true)
     {
         var lengthBuffer = new byte[sizeof(int)];
-        await ReadExactAsync(server, lengthBuffer).ConfigureAwait(false);
+        await ReadExactAsync(client, lengthBuffer).ConfigureAwait(false);
         var requestLength = BitConverter.ToInt32(lengthBuffer, 0);
         if (requestLength == 0)
         {
@@ -65,7 +57,7 @@ try
         }
 
         var requestBuffer = new byte[requestLength];
-        await ReadExactAsync(server, requestBuffer).ConfigureAwait(false);
+        await ReadExactAsync(client, requestBuffer).ConfigureAwait(false);
         var request = JsonSerializer.Deserialize<ElevatedRequest>(Encoding.UTF8.GetString(requestBuffer));
         if (request?.Action is null || string.IsNullOrWhiteSpace(request.Nonce))
         {
@@ -96,7 +88,7 @@ try
             }
         }
 
-        await WriteResponseAsync(server, request.Nonce, result).ConfigureAwait(false);
+        await WriteResponseAsync(client, request.Nonce, result).ConfigureAwait(false);
     }
 }
 catch (Exception ex)

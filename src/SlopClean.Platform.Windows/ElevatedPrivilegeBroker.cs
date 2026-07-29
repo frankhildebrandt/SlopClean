@@ -12,7 +12,7 @@ namespace SlopClean.Platform.Windows;
 
 public sealed class ElevatedPrivilegeBroker : IPrivilegeBroker
 {
-    private static readonly TimeSpan ConnectTimeout = TimeSpan.FromSeconds(45);
+    private static readonly TimeSpan ConnectTimeout = TimeSpan.FromSeconds(90);
 
     private readonly string _helperPath;
     private readonly bool _elevate;
@@ -58,110 +58,73 @@ public sealed class ElevatedPrivilegeBroker : IPrivilegeBroker
         var pipeName = $"SlopClean.Elevated.{Guid.NewGuid():N}";
         var sessionNonce = Guid.NewGuid().ToString("N");
 
+        // Medium-IL UI owns the pipe. High-IL elevated helper connects as client and sends "ready".
+        // (Opposite ownership breaks under UAC mandatory integrity.)
+        var server = CreateServer(pipeName);
         Process? process = null;
-        NamedPipeClientStream? client = null;
         try
         {
-            process = StartHelper(pipeName, sessionNonce);
-            client = await ConnectAndHandshakeAsync(pipeName, sessionNonce, process, cancellationToken)
+            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeoutCts.CancelAfter(_elevate ? ConnectTimeout : TimeSpan.FromSeconds(5));
+
+            var connectTask = server.WaitForConnectionAsync(timeoutCts.Token);
+
+            try
+            {
+                process = StartHelper(pipeName, sessionNonce);
+            }
+            catch (Win32Exception ex) when (ex.NativeErrorCode == 1223)
+            {
+                await server.DisposeAsync().ConfigureAwait(false);
+                throw new InvalidOperationException("Administrator approval was cancelled.");
+            }
+
+            await WaitForHelperConnectionAsync(connectTask, process, cancellationToken, timeoutCts.Token)
                 .ConfigureAwait(false);
-            return new ElevatedSession(client, process);
-        }
-        catch (Win32Exception ex) when (ex.NativeErrorCode == 1223)
-        {
-            if (client is not null)
-            {
-                await client.DisposeAsync().ConfigureAwait(false);
-            }
-
-            if (process is not null)
-            {
-                TryKill(process);
-                process.Dispose();
-            }
-
-            throw new InvalidOperationException("Administrator approval was cancelled.");
+            await ReadReadyAsync(server, sessionNonce, timeoutCts.Token).ConfigureAwait(false);
+            return new ElevatedSession(server, process);
         }
         catch
         {
-            if (client is not null)
-            {
-                await client.DisposeAsync().ConfigureAwait(false);
-            }
-
             if (process is not null)
             {
                 TryKill(process);
                 process.Dispose();
             }
 
+            await server.DisposeAsync().ConfigureAwait(false);
             throw;
         }
     }
 
-    private async Task<NamedPipeClientStream> ConnectAndHandshakeAsync(
-        string pipeName,
-        string sessionNonce,
+    private async Task WaitForHelperConnectionAsync(
+        Task connectTask,
         Process process,
-        CancellationToken cancellationToken)
+        CancellationToken userCancellation,
+        CancellationToken waitCancellation)
     {
-        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeoutCts.CancelAfter(_elevate ? ConnectTimeout : TimeSpan.FromSeconds(5));
-
-        Exception? last = null;
-        while (!timeoutCts.IsCancellationRequested)
+        if (!_elevate)
         {
-            // NamedPipeClientStream is single-use after a failed ConnectAsync on some runtimes.
-            var client = new NamedPipeClientStream(
-                ".",
-                pipeName,
-                PipeDirection.InOut,
-                PipeOptions.Asynchronous);
-            try
+            var exitTask = process.WaitForExitAsync(waitCancellation);
+            var finished = await Task.WhenAny(connectTask, exitTask).ConfigureAwait(false);
+            if (finished == exitTask)
             {
-                await client.ConnectAsync(500, timeoutCts.Token).ConfigureAwait(false);
-                await ReadReadyAsync(client, sessionNonce, timeoutCts.Token).ConfigureAwait(false);
-                return client;
-            }
-            catch (Exception ex) when (ex is TimeoutException or IOException or OperationCanceledException)
-            {
-                last = ex;
-                await client.DisposeAsync().ConfigureAwait(false);
-
-                if (cancellationToken.IsCancellationRequested)
-                {
-                    throw;
-                }
-
-                // Fail fast for non-elevated stubs that exit immediately.
-                if (!_elevate)
-                {
-                    try
-                    {
-                        if (process.HasExited)
-                        {
-                            throw new InvalidOperationException(
-                                $"Elevated helper exited before IPC ready handshake (exit code {process.ExitCode}).");
-                        }
-                    }
-                    catch (InvalidOperationException)
-                    {
-                        throw;
-                    }
-                    catch
-                    {
-                        // ignore unreliable process handle
-                    }
-                }
-
-                await Task.Delay(100, CancellationToken.None).ConfigureAwait(false);
+                await exitTask.ConfigureAwait(false);
+                throw new InvalidOperationException(
+                    $"Elevated helper exited before IPC ready handshake (exit code {process.ExitCode}).");
             }
         }
 
-        throw new InvalidOperationException(
-            "Timed out waiting for elevated helper IPC ready message. "
-            + "Approve the UAC prompt if it is still open."
-            + (last is null ? "" : $" ({last.GetType().Name})"));
+        try
+        {
+            await connectTask.ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (!userCancellation.IsCancellationRequested)
+        {
+            throw new InvalidOperationException(
+                "Timed out waiting for elevated helper IPC ready message. "
+                + "Approve the UAC prompt if it is still open.");
+        }
     }
 
     private Process StartHelper(string pipeName, string sessionNonce)
@@ -219,9 +182,19 @@ public sealed class ElevatedPrivilegeBroker : IPrivilegeBroker
         }
     }
 
+    private static NamedPipeServerStream CreateServer(string pipeName)
+        => NamedPipeServerStreamAcl.Create(
+            pipeName,
+            PipeDirection.InOut,
+            1,
+            PipeTransmissionMode.Byte,
+            PipeOptions.Asynchronous,
+            0,
+            0,
+            CreatePipeSecurity());
+
     /// <summary>
-    /// DACL for the helper-hosted pipe. Mandatory integrity is lowered separately via
-    /// <see cref="PipeIntegrity"/> so the medium-IL UI client can connect.
+    /// Pipe ACL for the UI-hosted server. Elevated helpers include BuiltinAdministrators.
     /// </summary>
     public static PipeSecurity CreatePipeSecurity()
     {
@@ -261,13 +234,13 @@ public sealed class ElevatedPrivilegeBroker : IPrivilegeBroker
 
     private sealed class ElevatedSession : IElevatedPrivilegeSession
     {
-        private readonly NamedPipeClientStream _client;
+        private readonly NamedPipeServerStream _server;
         private readonly Process _process;
         private bool _disposed;
 
-        public ElevatedSession(NamedPipeClientStream client, Process process)
+        public ElevatedSession(NamedPipeServerStream server, Process process)
         {
-            _client = client;
+            _server = server;
             _process = process;
         }
 
@@ -284,10 +257,10 @@ public sealed class ElevatedPrivilegeBroker : IPrivilegeBroker
 
             var payload = JsonSerializer.Serialize(request);
             var bytes = Encoding.UTF8.GetBytes(payload);
-            await WriteFrameAsync(_client, bytes, cancellationToken).ConfigureAwait(false);
+            await WriteFrameAsync(_server, bytes, cancellationToken).ConfigureAwait(false);
 
             var lengthBuffer = new byte[sizeof(int)];
-            await ReadExactAsync(_client, lengthBuffer, cancellationToken).ConfigureAwait(false);
+            await ReadExactAsync(_server, lengthBuffer, cancellationToken).ConfigureAwait(false);
             var responseLength = BitConverter.ToInt32(lengthBuffer, 0);
             if (responseLength is < 0 or > 1_000_000)
             {
@@ -295,7 +268,7 @@ public sealed class ElevatedPrivilegeBroker : IPrivilegeBroker
             }
 
             var responseBuffer = new byte[responseLength];
-            await ReadExactAsync(_client, responseBuffer, cancellationToken).ConfigureAwait(false);
+            await ReadExactAsync(_server, responseBuffer, cancellationToken).ConfigureAwait(false);
             var response = JsonSerializer.Deserialize<ElevatedResponse>(Encoding.UTF8.GetString(responseBuffer));
             if (response is null || !string.Equals(response.Nonce, nonce, StringComparison.Ordinal))
             {
@@ -315,10 +288,10 @@ public sealed class ElevatedPrivilegeBroker : IPrivilegeBroker
             _disposed = true;
             try
             {
-                if (_client.IsConnected)
+                if (_server.IsConnected)
                 {
-                    await _client.WriteAsync(BitConverter.GetBytes(0)).ConfigureAwait(false);
-                    await _client.FlushAsync().ConfigureAwait(false);
+                    await _server.WriteAsync(BitConverter.GetBytes(0)).ConfigureAwait(false);
+                    await _server.FlushAsync().ConfigureAwait(false);
                 }
             }
             catch
@@ -347,7 +320,7 @@ public sealed class ElevatedPrivilegeBroker : IPrivilegeBroker
             }
             finally
             {
-                await _client.DisposeAsync().ConfigureAwait(false);
+                await _server.DisposeAsync().ConfigureAwait(false);
                 _process.Dispose();
             }
         }
