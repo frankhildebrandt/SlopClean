@@ -9,6 +9,18 @@
   <data name="ModulesTitle" xml:space="preserve"><value>Modules</value></data>
   <data name="SettingsTitle" xml:space="preserve"><value>Settings</value></data>
   <data name="AboutTitle" xml:space="preserve"><value>About</value></data>
+  <data name="AboutPageTitle" xml:space="preserve"><value>About SlopClean</value></data>
+  <data name="AboutBlurb" xml:space="preserve"><value>SlopClean is a free, open-source Windows cleanup and optimization tool without ads or telemetry.</value></data>
+  <data name="AboutVersionFormat" xml:space="preserve"><value>Version {0}</value></data>
+  <data name="AboutSourceLabel" xml:space="preserve"><value>Source code</value></data>
+  <data name="AboutLicenseLabel" xml:space="preserve"><value>License: AGPL-3.0-or-later</value></data>
+  <data name="AboutReviewHint" xml:space="preserve"><value>Source code and contributions are welcome. Always review scan results before applying changes.</value></data>
+  <data name="AboutOpenSourceTitle" xml:space="preserve"><value>Open source</value></data>
+  <data name="OssDotNetExcerpt" xml:space="preserve"><value>Cross-platform runtime and base class libraries that power SlopClean.</value></data>
+  <data name="OssWindowsAppSdkExcerpt" xml:space="preserve"><value>Modern Windows desktop UI stack (WinUI 3) used for the SlopClean shell and pages.</value></data>
+  <data name="OssCommunityToolkitExcerpt" xml:space="preserve"><value>MVVM helpers such as ObservableObject and relay commands for thin, testable view models.</value></data>
+  <data name="OssMicrosoftExtensionsExcerpt" xml:space="preserve"><value>Dependency injection and logging abstractions used to compose modules and services.</value></data>
+  <data name="OssSerilogExcerpt" xml:space="preserve"><value>Structured local logging with rotating, path-redacted sinks — no telemetry.</value></data>
   <data name="QuickScan" xml:space="preserve"><value>Quick Scan</value></data>
   <data name="ApplySelected" xml:space="preserve"><value>Apply selected</value></data>
   <data name="PrivacyNotice" xml:space="preserve"><value>SlopClean stores logs locally only. Paths are redacted. No telemetry is sent.</value></data>

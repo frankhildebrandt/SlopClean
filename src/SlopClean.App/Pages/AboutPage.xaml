@@ -2,14 +2,53 @@
 <Page
     x:Class="SlopClean.App.Pages.AboutPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:models="using:SlopClean.App.Models">
     <ScrollViewer Padding="24">
         <StackPanel Spacing="12" MaxWidth="720">
-            <TextBlock Style="{StaticResource TitleTextBlockStyle}" Text="About SlopClean" />
-            <TextBlock TextWrapping="Wrap" Text="SlopClean is a free, open-source Windows cleanup and optimization tool without ads or telemetry." />
-            <TextBlock Text="Version 0.1.0" />
-            <TextBlock TextWrapping="Wrap" Text="License: GNU Affero General Public License v3.0 or later (AGPL-3.0-or-later)" />
-            <TextBlock TextWrapping="Wrap" Text="Source code and contributions are welcome. Always review scan results before applying changes." />
+            <TextBlock Style="{StaticResource TitleTextBlockStyle}" Text="{x:Bind ViewModel.Title}" />
+            <TextBlock TextWrapping="Wrap" Text="{x:Bind ViewModel.Blurb}" />
+            <TextBlock Text="{x:Bind ViewModel.VersionText}" />
+
+            <StackPanel Orientation="Horizontal" Spacing="16">
+                <HyperlinkButton
+                    Content="{x:Bind ViewModel.SourceLabel}"
+                    NavigateUri="{x:Bind ViewModel.SourceUrl}" />
+                <HyperlinkButton
+                    Content="{x:Bind ViewModel.LicenseLabel}"
+                    NavigateUri="{x:Bind ViewModel.LicenseUrl}" />
+            </StackPanel>
+
+            <TextBlock TextWrapping="Wrap" Text="{x:Bind ViewModel.ReviewHint}" />
+
+            <TextBlock
+                Margin="0,12,0,0"
+                Style="{StaticResource SubtitleTextBlockStyle}"
+                Text="{x:Bind ViewModel.OpenSourceSectionTitle}" />
+
+            <ItemsRepeater ItemsSource="{x:Bind ViewModel.Credits}">
+                <ItemsRepeater.Layout>
+                    <StackLayout Spacing="16" />
+                </ItemsRepeater.Layout>
+                <ItemsRepeater.ItemTemplate>
+                    <DataTemplate x:DataType="models:OpenSourceCredit">
+                        <StackPanel Spacing="4">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <HyperlinkButton
+                                    Padding="0"
+                                    Content="{x:Bind Name}"
+                                    NavigateUri="{x:Bind ProjectUrl}" />
+                                <TextBlock
+                                    VerticalAlignment="Center"
+                                    Opacity="0.75"
+                                    Style="{StaticResource CaptionTextBlockStyle}"
+                                    Text="{x:Bind LicenseId}" />
+                            </StackPanel>
+                            <TextBlock TextWrapping="Wrap" Text="{x:Bind Excerpt}" />
+                        </StackPanel>
+                    </DataTemplate>
+                </ItemsRepeater.ItemTemplate>
+            </ItemsRepeater>
         </StackPanel>
     </ScrollViewer>
 </Page>

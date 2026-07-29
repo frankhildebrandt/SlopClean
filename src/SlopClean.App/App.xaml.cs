@@ -87,6 +87,7 @@ public partial class App : Application
         services.AddSingleton<CleanTasksViewModel>();
         services.AddTransient<RestoreViewModel>();
         services.AddTransient<SettingsViewModel>();
+        services.AddTransient<AboutViewModel>();
         return services.BuildServiceProvider();
     }
 }
