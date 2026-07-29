@@ -28,7 +28,8 @@ public sealed class BackupService : IBackupService
             or PrivilegedOperationCodes.DeleteDirectory
             or PrivilegedOperationCodes.DeleteRegistryKey
             or PrivilegedOperationCodes.DeleteRegistryValue
-            or PrivilegedOperationCodes.DisableStartupShortcut;
+            or PrivilegedOperationCodes.DisableStartupShortcut
+            or PrivilegedOperationCodes.DeleteDriverPackage;
 
     public async Task<RestorePointManifest?> CreatePendingBackupAsync(
         OptimizationAction action,
@@ -79,6 +80,10 @@ public sealed class BackupService : IBackupService
                 case PrivilegedOperationCodes.DeleteRegistryValue:
                     BackupRegistryValue(action, payloadRoot, manifest);
                     break;
+                case PrivilegedOperationCodes.DeleteDriverPackage:
+                    // Elevated helper exports the package into this payload directory during apply.
+                    PrepareDriverPackageBackup(action, payloadRoot, manifest);
+                    break;
                 default:
                     await _store.DiscardAsync(manifest.Id, cancellationToken).ConfigureAwait(false);
                     return null;
@@ -125,6 +130,11 @@ public sealed class BackupService : IBackupService
                 case RestorePointKind.RegistryValue:
                     RestoreRegistryValue(manifest);
                     break;
+                case RestorePointKind.DriverPackage:
+                    return ApplyResult.Failed(
+                        manifest.ActionId,
+                        restoreId,
+                        "Driver package restore must run through the elevated restore path.");
                 default:
                     return ApplyResult.Failed(manifest.ActionId, restoreId, $"Unsupported restore kind '{manifest.Kind}'.");
             }
@@ -137,6 +147,24 @@ public sealed class BackupService : IBackupService
             await _store.MarkFailedAsync(restoreId, cancellationToken).ConfigureAwait(false);
             return ApplyResult.Failed(manifest.ActionId, restoreId, ex.Message);
         }
+    }
+
+    private void PrepareDriverPackageBackup(OptimizationAction action, string payloadRoot, RestorePointManifest manifest)
+    {
+        var packageDir = Path.Combine(payloadRoot, "package");
+        _fileSystem.CreateDirectory(packageDir);
+        manifest.Kind = RestorePointKind.DriverPackage;
+        manifest.PayloadRelativePath = "package";
+        manifest.OriginalPath = action.Payload?.GetValueOrDefault(DriverPackagePayloadKeys.PublishedName);
+        if (action.Payload is not null)
+        {
+            foreach (var pair in action.Payload)
+            {
+                manifest.Metadata[pair.Key] = pair.Value;
+            }
+        }
+
+        manifest.Metadata[DriverPackagePayloadKeys.RestorePayloadDirectory] = packageDir;
     }
 
     private void BackupFile(string path, string payloadRoot, RestorePointManifest manifest)

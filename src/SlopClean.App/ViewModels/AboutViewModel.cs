@@ -51,6 +51,11 @@ public sealed class AboutViewModel : ObservableObject
                 new Uri("https://github.com/serilog/serilog"),
                 "Apache-2.0",
                 resources.GetString("OssSerilogExcerpt")),
+            new OpenSourceCredit(
+                "System.Diagnostics.EventLog",
+                new Uri("https://github.com/dotnet/runtime"),
+                "MIT",
+                resources.GetString("OssEventLogExcerpt")),
         ];
     }
 

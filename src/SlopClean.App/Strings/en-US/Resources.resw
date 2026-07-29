@@ -21,6 +21,12 @@
   <data name="OssCommunityToolkitExcerpt" xml:space="preserve"><value>MVVM helpers such as ObservableObject and relay commands for thin, testable view models.</value></data>
   <data name="OssMicrosoftExtensionsExcerpt" xml:space="preserve"><value>Dependency injection and logging abstractions used to compose modules and services.</value></data>
   <data name="OssSerilogExcerpt" xml:space="preserve"><value>Structured local logging with rotating, path-redacted sinks — no telemetry.</value></data>
+  <data name="OssEventLogExcerpt" xml:space="preserve"><value>Reads local Windows Event Log entries (Code Integrity signals) for Core Isolation driver analysis — no network access.</value></data>
+  <data name="ModuleCoreIsolationDriversName" xml:space="preserve"><value>Core Isolation Drivers</value></data>
+  <data name="ModuleCoreIsolationDriversDescription" xml:space="preserve"><value>Finds orphan OEM driver packages and observed Code Integrity signals that may block Memory Integrity. Removes orphans by default; in-use blockers only with explicit opt-in.</value></data>
+  <data name="CoreIsolationAllowInUseWarning" xml:space="preserve"><value>WARNING: Removes driver packages still bound to devices. Risk of BSOD or broken hardware. Restore re-stages the package only (device binding not guaranteed).</value></data>
+  <data name="ApplyRebootRequired" xml:space="preserve"><value>Succeeded — reboot required</value></data>
+  <data name="DriverRestoreBestEffort" xml:space="preserve"><value>Driver package restore is best effort and may not rebind devices.</value></data>
   <data name="QuickScan" xml:space="preserve"><value>Quick Scan</value></data>
   <data name="ApplySelected" xml:space="preserve"><value>Apply selected</value></data>
   <data name="PrivacyNotice" xml:space="preserve"><value>SlopClean stores logs locally only. Paths are redacted. No telemetry is sent.</value></data>

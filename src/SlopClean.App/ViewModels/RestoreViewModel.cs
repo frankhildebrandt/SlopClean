@@ -93,7 +93,7 @@ public partial class RestoreViewModel : ObservableObject
             foreach (var item in selected)
             {
                 var result = await _engine.RestoreAsync(item.Id, _cts.Token);
-                if (result.Outcome == ApplyOutcome.Succeeded)
+                if (result.IsSuccessful)
                 {
                     succeeded++;
                 }

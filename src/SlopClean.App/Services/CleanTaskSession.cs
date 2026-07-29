@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Dispatching;
+using SlopClean.App.Helpers;
 using SlopClean.App.ViewModels;
 using SlopClean.Core.Engine;
 using SlopClean.Core.Models;
@@ -50,7 +51,10 @@ public sealed class CleanTaskSession : ICleanTaskSession
 
             _activePlan = plan;
             StatusText = $"{Tasks.Count} task(s) ready.";
-            SummaryText = $"{plan.ModuleName}: {plan.Changes.Count} task(s), {FormatBytes(plan.TotalSizeBytes)}.";
+            var size = ByteSizeFormatter.Format(plan.TotalSizeBytes);
+            SummaryText = string.IsNullOrEmpty(size)
+                ? $"{plan.ModuleName}: {plan.Changes.Count} task(s)."
+                : $"{plan.ModuleName}: {plan.Changes.Count} task(s), {size}.";
         }
 
         RaiseChanged();
@@ -93,11 +97,13 @@ public sealed class CleanTaskSession : ICleanTaskSession
         try
         {
             var results = await _engine.ApplyPlanAsync(plan, progress, cancellationToken).ConfigureAwait(false);
-            var succeeded = results.Count(r => r.Outcome == ApplyOutcome.Succeeded);
-            var freed = results.Sum(r => r.BytesFreed);
+            var succeeded = results.Count(r => r.IsSuccessful);
+            var freed = ByteSizeFormatter.Format(results.Sum(r => r.BytesFreed));
             await UpdateUiAsync(() =>
             {
-                StatusText = $"Done — {succeeded}/{results.Count} succeeded, freed {FormatBytes(freed)}.";
+                StatusText = string.IsNullOrEmpty(freed)
+                    ? $"Done — {succeeded}/{results.Count} succeeded."
+                    : $"Done — {succeeded}/{results.Count} succeeded, freed {freed}.";
                 SummaryText = $"{plan.ModuleName}: finished {results.Count} task(s).";
             }).ConfigureAwait(false);
         }
@@ -219,18 +225,4 @@ public sealed class CleanTaskSession : ICleanTaskSession
     }
 
     private void RaiseChanged() => Changed?.Invoke(this, EventArgs.Empty);
-
-    private static string FormatBytes(long bytes)
-    {
-        string[] suffixes = ["B", "KB", "MB", "GB", "TB"];
-        double value = bytes;
-        var i = 0;
-        while (value >= 1024 && i < suffixes.Length - 1)
-        {
-            value /= 1024;
-            i++;
-        }
-
-        return $"{value:0.##} {suffixes[i]}";
-    }
 }

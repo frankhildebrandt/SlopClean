@@ -21,6 +21,12 @@
   <data name="OssCommunityToolkitExcerpt" xml:space="preserve"><value>MVVM-Hilfen wie ObservableObject und Relay-Commands für schlanke, testbare ViewModels.</value></data>
   <data name="OssMicrosoftExtensionsExcerpt" xml:space="preserve"><value>Dependency Injection und Logging-Abstraktionen zur Zusammensetzung von Modulen und Diensten.</value></data>
   <data name="OssSerilogExcerpt" xml:space="preserve"><value>Strukturiertes lokales Logging mit rotierenden, pfadredigierten Sinks — ohne Telemetrie.</value></data>
+  <data name="OssEventLogExcerpt" xml:space="preserve"><value>Liest lokale Windows-Ereignisprotokolle (Code-Integrity-Signale) für die Kernisolierungs-Treiberanalyse — ohne Netzwerkzugriff.</value></data>
+  <data name="ModuleCoreIsolationDriversName" xml:space="preserve"><value>Kernisolierungs-Treiber</value></data>
+  <data name="ModuleCoreIsolationDriversDescription" xml:space="preserve"><value>Findet verwaiste OEM-Treiberpakete und beobachtete Code-Integrity-Signale, die Speicherintegrität blockieren können. Entfernt Orphans standardmäßig; In-use-Blocker nur mit explizitem Opt-in.</value></data>
+  <data name="CoreIsolationAllowInUseWarning" xml:space="preserve"><value>WARNUNG: Entfernt Treiberpakete, die noch Geräten zugeordnet sind. Risiko von BSOD oder defekter Hardware. Wiederherstellen stellt das Paket nur bereit (Gerätebindung nicht garantiert).</value></data>
+  <data name="ApplyRebootRequired" xml:space="preserve"><value>Erfolgreich — Neustart erforderlich</value></data>
+  <data name="DriverRestoreBestEffort" xml:space="preserve"><value>Die Wiederherstellung von Treiberpaketen ist best effort und stellt die Gerätebindung möglicherweise nicht wieder her.</value></data>
   <data name="QuickScan" xml:space="preserve"><value>Schnellscan</value></data>
   <data name="ApplySelected" xml:space="preserve"><value>Auswahl anwenden</value></data>
   <data name="PrivacyNotice" xml:space="preserve"><value>SlopClean speichert Protokolle nur lokal. Pfade werden redigiert. Es wird keine Telemetrie gesendet.</value></data>

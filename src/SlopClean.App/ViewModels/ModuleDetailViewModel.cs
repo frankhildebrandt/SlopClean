@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Dispatching;
+using SlopClean.App.Helpers;
 using SlopClean.App.Pages;
 using SlopClean.App.Services;
 using SlopClean.Core.Engine;
@@ -59,8 +60,9 @@ public partial class ModuleDetailViewModel : ObservableObject
     public async Task InitializeAsync(string moduleId)
     {
         _module = _registry.GetRequired(moduleId);
-        Title = _module.Name;
-        Description = _module.Description;
+        var (name, description) = ModuleLocalization.Resolve(_module);
+        Title = name;
+        Description = description;
         Parameters.Clear();
         Findings.Clear();
 
@@ -142,7 +144,7 @@ public partial class ModuleDetailViewModel : ObservableObject
             return;
         }
 
-        var plan = OptimizationPlan.FromFindings(_module.Id, _module.Name, selected);
+        var plan = OptimizationPlan.FromFindings(_module.Id, Title, selected);
         _planSession.Set(plan);
         _navigation.Navigate(typeof(ReviewPlanPage));
         StatusText = $"Reviewing {plan.Changes.Count} change(s)";

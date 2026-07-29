@@ -18,15 +18,26 @@ public sealed record OptimizationPlan(
             or PrivilegedOperationCodes.DeleteDirectory
             or PrivilegedOperationCodes.DeleteRegistryKey
             or PrivilegedOperationCodes.DeleteRegistryValue
-            or PrivilegedOperationCodes.DisableStartupShortcut;
+            or PrivilegedOperationCodes.DisableStartupShortcut
+            or PrivilegedOperationCodes.DeleteDriverPackage;
 
-    public static string RestorableReason(string operationCode)
+    public static string RestorableReason(string operationCode, IReadOnlyDictionary<string, string>? payload = null)
         => operationCode switch
         {
             PrivilegedOperationCodes.EmptyRecycleBin => "Emptying the Recycle Bin cannot be restored.",
+            PrivilegedOperationCodes.DeleteDriverPackage when IsBestEffortDriverRestore(payload)
+                => "A driver package backup will be created. Restore re-stages the package but may not rebind devices (best effort).",
+            PrivilegedOperationCodes.DeleteDriverPackage
+                => "A driver package backup will be created before applying.",
             _ when IsRestorableOperation(operationCode) => "A backup will be created before applying.",
             _ => "This action cannot be restored."
         };
+
+    private static bool IsBestEffortDriverRestore(IReadOnlyDictionary<string, string>? payload)
+        => payload is not null
+           && payload.TryGetValue("bestEffortRestore", out var value)
+           && bool.TryParse(value, out var bestEffort)
+           && bestEffort;
 
     public static OptimizationPlan FromFindings(
         string moduleId,
@@ -48,7 +59,7 @@ public sealed record OptimizationPlan(
                     Risk: f.Risk,
                     RequiredPrivilege: f.RequiredPrivilege,
                     IsRestorable: restorable,
-                    RestorableReason: RestorableReason(action.OperationCode),
+                    RestorableReason: RestorableReason(action.OperationCode, action.Payload),
                     Action: action);
             })
             .ToArray();

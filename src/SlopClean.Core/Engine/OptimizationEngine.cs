@@ -108,9 +108,20 @@ public sealed class OptimizationEngine
 
     public async Task<ApplyResult> RestoreAsync(string restoreId, CancellationToken cancellationToken)
     {
-        if (_backupService is null)
+        if (_backupService is null || _restorePointStore is null)
         {
             return ApplyResult.Failed(restoreId, restoreId, "Backup service is not configured.");
+        }
+
+        var manifest = await _restorePointStore.GetAsync(restoreId, cancellationToken).ConfigureAwait(false);
+        if (manifest is null)
+        {
+            return ApplyResult.Failed(restoreId, restoreId, "Restore point not found.");
+        }
+
+        if (manifest.Kind == RestorePointKind.DriverPackage)
+        {
+            return await RestoreDriverPackageAsync(manifest, cancellationToken).ConfigureAwait(false);
         }
 
         return await _backupService.RestoreAsync(restoreId, cancellationToken).ConfigureAwait(false);
@@ -137,18 +148,21 @@ public sealed class OptimizationEngine
                 displayName ??= action.Path ?? action.FindingId;
 
                 var needsElevation = action.RequiredPrivilege == RequiredPrivilege.Elevated;
-                progress?.Report(new ApplyProgress(
+                void ReportRunning(string message) => progress?.Report(new ApplyProgress(
                     action.Id,
                     action.FindingId,
                     displayName,
                     ApplyItemState.Running,
                     completed,
                     list.Length,
+                    message));
+
+                ReportRunning(
                     needsElevation
                         ? elevated.Session is null && elevated.Error is null
-                            ? "Preparing backup, then one admin prompt for all elevated tasks…"
+                            ? "Preparing backup…"
                             : "Working (elevated)…"
-                        : "Working…"));
+                        : "Working…");
 
                 ApplyResult result;
                 try
@@ -157,6 +171,10 @@ public sealed class OptimizationEngine
                             action,
                             displayName,
                             elevated,
+                            needsElevation && elevated.Session is null && elevated.Error is null
+                                ? () => ReportRunning(
+                                    "Waiting for admin helper IPC — approve the UAC prompt if shown…")
+                                : null,
                             cancellationToken)
                         .ConfigureAwait(false);
                 }
@@ -177,6 +195,7 @@ public sealed class OptimizationEngine
                 var state = result.Outcome switch
                 {
                     ApplyOutcome.Succeeded => ApplyItemState.Succeeded,
+                    ApplyOutcome.SucceededRebootRequired => ApplyItemState.SucceededRebootRequired,
                     ApplyOutcome.Skipped => ApplyItemState.Skipped,
                     _ => ApplyItemState.Failed
                 };
@@ -240,6 +259,7 @@ public sealed class OptimizationEngine
         OptimizationAction action,
         string? displayName,
         ElevatedSessionState elevated,
+        Action? beforeElevatedSession,
         CancellationToken cancellationToken)
     {
         var validation = _safetyPolicy.ValidateAction(action);
@@ -256,12 +276,19 @@ public sealed class OptimizationEngine
                 restorePoint = await _backupService
                     .CreatePendingBackupAsync(action, displayName, cancellationToken)
                     .ConfigureAwait(false);
+
+                if (restorePoint is not null
+                    && action.OperationCode == PrivilegedOperationCodes.DeleteDriverPackage)
+                {
+                    action = AttachDriverBackupDirectory(action, restorePoint);
+                }
             }
 
             var module = _registry.GetRequired(action.ModuleId);
             ApplyResult result;
             if (action.RequiredPrivilege == RequiredPrivilege.Elevated)
             {
+                beforeElevatedSession?.Invoke();
                 var session = await EnsureElevatedSessionAsync(elevated, cancellationToken).ConfigureAwait(false);
                 if (session is null)
                 {
@@ -276,6 +303,14 @@ public sealed class OptimizationEngine
                     result = await session.ExecuteAsync(action, cancellationToken).ConfigureAwait(false);
                 }
             }
+            else if (action.OperationCode is PrivilegedOperationCodes.DeleteDriverPackage
+                     or PrivilegedOperationCodes.RestoreDriverPackage)
+            {
+                result = ApplyResult.Failed(
+                    action.Id,
+                    action.FindingId,
+                    "Driver-package operations must run elevated.");
+            }
             else if (module is IApplicableModule applicable)
             {
                 result = await applicable.ApplyAsync(action, cancellationToken).ConfigureAwait(false);
@@ -287,7 +322,7 @@ public sealed class OptimizationEngine
 
             if (restorePoint is not null && _restorePointStore is not null)
             {
-                if (result.Outcome == ApplyOutcome.Succeeded)
+                if (result.IsSuccessful)
                 {
                     await _restorePointStore.CommitAsync(restorePoint.Id, cancellationToken).ConfigureAwait(false);
                     return result with { RestoreTokenId = restorePoint.Id };
@@ -316,6 +351,93 @@ public sealed class OptimizationEngine
 
             return ApplyResult.Failed(action.Id, action.FindingId, ex.Message);
         }
+    }
+
+    private async Task<ApplyResult> RestoreDriverPackageAsync(
+        RestorePointManifest manifest,
+        CancellationToken cancellationToken)
+    {
+        if (manifest.Status != RestorePointStatus.Committed)
+        {
+            return ApplyResult.Failed(manifest.ActionId, manifest.Id, $"Restore point is {manifest.Status}, not committed.");
+        }
+
+        if (!manifest.Metadata.TryGetValue(DriverPackagePayloadKeys.PublishedName, out var published)
+            || !manifest.Metadata.TryGetValue(DriverPackagePayloadKeys.ClassGuid, out var classGuid)
+            || !manifest.Metadata.TryGetValue(DriverPackagePayloadKeys.PackageFingerprint, out var fingerprint))
+        {
+            return ApplyResult.Failed(manifest.ActionId, manifest.Id, "Driver restore metadata is incomplete.");
+        }
+
+        var payloadDir = _restorePointStore!.GetPayloadDirectory(manifest.Id);
+        var packageDir = manifest.Metadata.TryGetValue(DriverPackagePayloadKeys.RestorePayloadDirectory, out var storedDir)
+            && !string.IsNullOrWhiteSpace(storedDir)
+                ? storedDir
+                : Path.Combine(payloadDir, manifest.PayloadRelativePath ?? "package");
+        var payload = new Dictionary<string, string>(manifest.Metadata, StringComparer.OrdinalIgnoreCase)
+        {
+            [DriverPackagePayloadKeys.PublishedName] = published,
+            [DriverPackagePayloadKeys.ClassGuid] = classGuid,
+            [DriverPackagePayloadKeys.PackageFingerprint] = fingerprint,
+            [DriverPackagePayloadKeys.RestorePayloadDirectory] = packageDir,
+            [DriverPackagePayloadKeys.RemovalMode] = DriverPackagePayloadKeys.RemovalModeOrphan,
+            [DriverPackagePayloadKeys.AllowInUse] = "false",
+            [DriverPackagePayloadKeys.IsBootCritical] = "false"
+        };
+        var action = new OptimizationAction(
+            Id: Guid.NewGuid().ToString("N"),
+            ModuleId: manifest.ModuleId,
+            FindingId: manifest.FindingId,
+            OperationCode: PrivilegedOperationCodes.RestoreDriverPackage,
+            Path: null,
+            AllowedRoot: null,
+            RequiredPrivilege: RequiredPrivilege.Elevated,
+            Payload: payload);
+
+        var validation = _safetyPolicy.ValidateAction(action);
+        if (!validation.IsAllowed)
+        {
+            return ApplyResult.Skipped(action.Id, manifest.Id, validation.Reason ?? "Blocked by safety policy.");
+        }
+
+        try
+        {
+            await using var session = await _privilegeBroker
+                .BeginElevatedSessionAsync(cancellationToken)
+                .ConfigureAwait(false);
+            var result = await session.ExecuteAsync(action, cancellationToken).ConfigureAwait(false);
+            if (result.IsSuccessful)
+            {
+                await _restorePointStore.MarkRestoredAsync(manifest.Id, cancellationToken).ConfigureAwait(false);
+            }
+            else
+            {
+                await _restorePointStore.MarkFailedAsync(manifest.Id, cancellationToken).ConfigureAwait(false);
+            }
+
+            return result with { FindingId = manifest.Id };
+        }
+        catch (Exception ex)
+        {
+            await _restorePointStore.MarkFailedAsync(manifest.Id, CancellationToken.None).ConfigureAwait(false);
+            return ApplyResult.Failed(manifest.ActionId, manifest.Id, ex.Message);
+        }
+    }
+
+    private static OptimizationAction AttachDriverBackupDirectory(
+        OptimizationAction action,
+        RestorePointManifest restorePoint)
+    {
+        if (!restorePoint.Metadata.TryGetValue(DriverPackagePayloadKeys.RestorePayloadDirectory, out var packageDir)
+            || string.IsNullOrWhiteSpace(packageDir))
+        {
+            throw new InvalidOperationException("Driver backup payload directory is missing from the restore point.");
+        }
+
+        var payload = action.Payload?.ToDictionary(static kv => kv.Key, static kv => kv.Value, StringComparer.OrdinalIgnoreCase)
+                      ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        payload[DriverPackagePayloadKeys.RestorePayloadDirectory] = packageDir;
+        return action with { Payload = payload };
     }
 
     private async Task<IAsyncDisposable> WaitLeaseAsync(string? driveHint, CancellationToken cancellationToken)

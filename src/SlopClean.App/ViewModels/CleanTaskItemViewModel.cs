@@ -1,4 +1,5 @@
 using CommunityToolkit.Mvvm.ComponentModel;
+using SlopClean.App.Helpers;
 using SlopClean.Core.Models;
 
 namespace SlopClean.App.ViewModels;
@@ -11,7 +12,7 @@ public partial class CleanTaskItemViewModel : ObservableObject
         FindingId = change.Id;
         Title = change.DisplayName;
         Details = change.Path ?? change.Details ?? "";
-        SizeText = FormatBytes(change.SizeBytes);
+        SizeText = ByteSizeFormatter.Format(change.SizeBytes);
         ModuleId = change.Action.ModuleId;
         State = ApplyItemState.Pending;
         Change = change;
@@ -39,6 +40,7 @@ public partial class CleanTaskItemViewModel : ObservableObject
         ApplyItemState.Pending => "\uE8DF",      // Checkbox
         ApplyItemState.Running => "\uE895",      // Sync
         ApplyItemState.Succeeded => "\uE73E",    // CheckMark
+        ApplyItemState.SucceededRebootRequired => "\uE777", // UpdateRestore / reboot
         ApplyItemState.Skipped => "\uE7BA",      // Warning
         ApplyItemState.Failed => "\uE783",       // ErrorBadge
         ApplyItemState.Cancelled => "\uE711",    // Cancel
@@ -47,7 +49,11 @@ public partial class CleanTaskItemViewModel : ObservableObject
 
     partial void OnStateChanged(ApplyItemState value)
     {
-        StatusText = value.ToString();
+        StatusText = value switch
+        {
+            ApplyItemState.SucceededRebootRequired => "Succeeded — reboot required",
+            _ => value.ToString()
+        };
         OnPropertyChanged(nameof(Glyph));
     }
 
@@ -55,19 +61,5 @@ public partial class CleanTaskItemViewModel : ObservableObject
     {
         State = progress.State;
         Message = progress.Message ?? progress.State.ToString();
-    }
-
-    private static string FormatBytes(long bytes)
-    {
-        string[] suffixes = ["B", "KB", "MB", "GB", "TB"];
-        double value = bytes;
-        var i = 0;
-        while (value >= 1024 && i < suffixes.Length - 1)
-        {
-            value /= 1024;
-            i++;
-        }
-
-        return $"{value:0.##} {suffixes[i]}";
     }
 }

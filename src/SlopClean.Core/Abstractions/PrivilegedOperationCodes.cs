@@ -8,6 +8,8 @@ public static class PrivilegedOperationCodes
     public const string DeleteRegistryValue = "delete-registry-value";
     public const string DeleteRegistryKey = "delete-registry-key";
     public const string DisableStartupShortcut = "disable-startup-shortcut";
+    public const string DeleteDriverPackage = "delete-driver-package";
+    public const string RestoreDriverPackage = "restore-driver-package";
 
     public static readonly HashSet<string> All = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -16,6 +18,8 @@ public static class PrivilegedOperationCodes
         EmptyRecycleBin,
         DeleteRegistryValue,
         DeleteRegistryKey,
-        DisableStartupShortcut
+        DisableStartupShortcut,
+        DeleteDriverPackage,
+        RestoreDriverPackage
     };
 }

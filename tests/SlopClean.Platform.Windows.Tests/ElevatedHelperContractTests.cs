@@ -63,7 +63,7 @@ public class ElevatedHelperContractTests
     }
 
     [Fact]
-    public async Task Broker_fails_quickly_when_helper_exits_without_connecting()
+    public async Task Broker_fails_quickly_when_helper_exits_without_ready_ipc()
     {
         var helper = Path.Combine(Path.GetTempPath(), $"SlopClean.FakeHelper.{Guid.NewGuid():N}.cmd");
         await File.WriteAllTextAsync(helper, "@echo off\r\nexit /b 1\r\n");
@@ -75,11 +75,54 @@ public class ElevatedHelperContractTests
             var ex = await Assert.ThrowsAsync<InvalidOperationException>(
                 () => broker.BeginElevatedSessionAsync(cts.Token));
 
-            Assert.Contains("connect", ex.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.True(
+                ex.Message.Contains("IPC", StringComparison.OrdinalIgnoreCase)
+                || ex.Message.Contains("exited", StringComparison.OrdinalIgnoreCase)
+                || ex.Message.Contains("ready", StringComparison.OrdinalIgnoreCase),
+                ex.Message);
         }
         finally
         {
             File.Delete(helper);
         }
+    }
+
+    [Fact]
+    public async Task Broker_completes_ready_handshake_with_unelevated_helper()
+    {
+        var helperPath = FindBuiltHelper();
+        Assert.True(helperPath is not null, "Build SlopClean.Elevated before running this test.");
+
+        var broker = new ElevatedPrivilegeBroker(helperPath: helperPath, elevate: false);
+        await using var session = await broker.BeginElevatedSessionAsync(CancellationToken.None);
+
+        var missing = Path.Combine(Path.GetTempPath(), $"slopclean-missing-{Guid.NewGuid():N}.tmp");
+        var result = await session.ExecuteAsync(
+            new OptimizationAction(
+                "1",
+                "temp-cleaner",
+                "f",
+                PrivilegedOperationCodes.DeleteFile,
+                missing,
+                Path.GetTempPath(),
+                RequiredPrivilege.Elevated),
+            CancellationToken.None);
+
+        Assert.Equal(ApplyOutcome.Skipped, result.Outcome);
+    }
+
+    private static string? FindBuiltHelper()
+    {
+        var candidates = new[]
+        {
+            Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..",
+                "src", "SlopClean.Elevated", "bin", "Release", "net10.0-windows10.0.19041.0", "SlopClean.Elevated.exe")),
+            Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..",
+                "src", "SlopClean.Elevated", "bin", "x64", "Release", "net10.0-windows10.0.19041.0", "SlopClean.Elevated.exe")),
+            Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..",
+                "src", "SlopClean.Elevated", "bin", "Debug", "net10.0-windows10.0.19041.0", "SlopClean.Elevated.exe")),
+        };
+
+        return candidates.FirstOrDefault(File.Exists);
     }
 }

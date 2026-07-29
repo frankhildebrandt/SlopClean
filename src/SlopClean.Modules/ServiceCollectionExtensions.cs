@@ -27,6 +27,7 @@ public static class SlopCleanModulesServiceCollectionExtensions
         services.AddSingleton<IModule, DiskAnalyzerModule>();
         services.AddSingleton<IModule, UninstallCleanupModule>();
         services.AddSingleton<IModule, ServiceAdvisorModule>();
+        services.AddSingleton<IModule, CoreIsolationDriversModule>();
 
         services.TryAddSingleton<ModuleRegistry>();
         services.TryAddSingleton<OptimizationEngine>();

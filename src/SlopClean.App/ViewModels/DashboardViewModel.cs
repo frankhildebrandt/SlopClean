@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
+using SlopClean.App.Helpers;
 using SlopClean.Core.Engine;
 using SlopClean.Core.Models;
 
@@ -20,7 +21,11 @@ public partial class DashboardViewModel : ObservableObject
         _registry = registry;
         _logger = logger;
         Modules = new ObservableCollection<ModuleSummaryViewModel>(
-            _registry.All.Select(m => new ModuleSummaryViewModel(m.Id, m.Name, m.Description, m.Category.ToString())));
+            _registry.All.Select(m =>
+            {
+                var (name, description) = ModuleLocalization.Resolve(m);
+                return new ModuleSummaryViewModel(m.Id, name, description, m.Category.ToString());
+            }));
     }
 
     public ObservableCollection<ModuleSummaryViewModel> Modules { get; }
@@ -32,7 +37,7 @@ public partial class DashboardViewModel : ObservableObject
     public partial string StatusText { get; set; } = "Ready";
 
     [ObservableProperty]
-    public partial string TotalSizeText { get; set; } = "0 B";
+    public partial string TotalSizeText { get; set; } = "—";
 
     [ObservableProperty]
     public partial int FindingCount { get; set; }
@@ -56,8 +61,11 @@ public partial class DashboardViewModel : ObservableObject
             var findings = await _engine.ScanAllAsync(null, progress, _cts.Token);
             FindingCount = findings.Count;
             TotalBytes = findings.Sum(f => f.SizeBytes);
-            TotalSizeText = FormatBytes(TotalBytes);
-            StatusText = $"Scan complete — {FindingCount} finding(s), {TotalSizeText}";
+            TotalSizeText = ByteSizeFormatter.FormatOrDash(TotalBytes);
+            var size = ByteSizeFormatter.Format(TotalBytes);
+            StatusText = string.IsNullOrEmpty(size)
+                ? $"Scan complete — {FindingCount} finding(s)"
+                : $"Scan complete — {FindingCount} finding(s), {size}";
             _logger.LogInformation("Dashboard scan complete with {Count} findings", FindingCount);
         }
         catch (OperationCanceledException)
@@ -77,20 +85,6 @@ public partial class DashboardViewModel : ObservableObject
 
     [RelayCommand]
     private void Cancel() => _cts?.Cancel();
-
-    private static string FormatBytes(long bytes)
-    {
-        string[] suffixes = ["B", "KB", "MB", "GB", "TB"];
-        double value = bytes;
-        var i = 0;
-        while (value >= 1024 && i < suffixes.Length - 1)
-        {
-            value /= 1024;
-            i++;
-        }
-
-        return $"{value:0.##} {suffixes[i]}";
-    }
 }
 
 public sealed class ModuleSummaryViewModel

@@ -104,15 +104,17 @@ Never set `requireAdministrator` on the WinUI app.
 | DiskAnalyzer | No | Analysis only |
 | UninstallCleanup | Yes (conservative) | Orphaned uninstall/run entries; matching AppData leftovers are sized and deletable only when explicitly selected; backups via central restore store |
 | ServiceAdvisor | No | Read-only curated JSON recommendations |
+| CoreIsolationDrivers | Yes (gated) | Orphan OEM packages default Apply; in-use/CI blockers only with explicit opt-in + warning; CI = observed signals (not a full HVCI scan); elevated export/delete/restore; fail-closed incl. disconnected devices |
 
 ### Out of MVP
 
 - External plugin DLLs
 - Cloud sync, accounts, telemetry, update ads
-- Aggressive registry/driver tweaks
+- Aggressive registry/driver tweaks (beyond the gated Core Isolation Drivers module)
 - Auto-deleting guessed program leftovers without an orphaned uninstall match and explicit selection
 - Changing Windows service start types
 - MSIX Store publishing (may follow)
+- Enabling Memory Integrity itself; bundling `hvciscan`; hard-deleting `.sys` under System32
 
 ---
 

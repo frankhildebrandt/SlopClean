@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml.Controls;
+using SlopClean.App.Helpers;
 using SlopClean.App.ViewModels;
 using SlopClean.Core.Engine;
 
@@ -14,7 +15,11 @@ public sealed partial class ModulesPage : Page
     {
         var registry = App.Services.GetRequiredService<ModuleRegistry>();
         Modules = new ObservableCollection<ModuleSummaryViewModel>(
-            registry.All.Select(m => new ModuleSummaryViewModel(m.Id, m.Name, m.Description, m.Category.ToString())));
+            registry.All.Select(m =>
+            {
+                var (name, description) = ModuleLocalization.Resolve(m);
+                return new ModuleSummaryViewModel(m.Id, name, description, m.Category.ToString());
+            }));
         InitializeComponent();
     }
 

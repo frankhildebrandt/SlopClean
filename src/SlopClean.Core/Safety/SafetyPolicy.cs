@@ -36,6 +36,12 @@ public sealed class SafetyPolicy
             return SafetyValidationResult.Allow();
         }
 
+        if (action.OperationCode is PrivilegedOperationCodes.DeleteDriverPackage
+            or PrivilegedOperationCodes.RestoreDriverPackage)
+        {
+            return DriverPackageEligibility.ValidatePayload(action);
+        }
+
         if (string.IsNullOrWhiteSpace(action.Path))
         {
             if (action.OperationCode is PrivilegedOperationCodes.DeleteRegistryValue

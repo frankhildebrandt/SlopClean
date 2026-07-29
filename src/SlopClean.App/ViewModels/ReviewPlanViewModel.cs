@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
+using SlopClean.App.Helpers;
 using SlopClean.App.Pages;
 using SlopClean.App.Services;
 using SlopClean.Core.Planning;
@@ -60,8 +61,10 @@ public partial class ReviewPlanViewModel : ObservableObject
             Changes.Add(new PlannedChangeItemViewModel(change));
         }
 
-        SummaryText =
-            $"{plan.Changes.Count} change(s), {FormatBytes(plan.TotalSizeBytes)} total, {plan.RestorableCount} with backup.";
+        var size = ByteSizeFormatter.Format(plan.TotalSizeBytes);
+        SummaryText = string.IsNullOrEmpty(size)
+            ? $"{plan.Changes.Count} change(s), {plan.RestorableCount} with backup."
+            : $"{plan.Changes.Count} change(s), {size} total, {plan.RestorableCount} with backup.";
         StatusText = _cleanTasks.IsRunning
             ? "A cleanup is already running. Open Clean Tasks to watch progress."
             : "Review the planned changes, then start cleanup on the Clean Tasks page.";
@@ -105,18 +108,4 @@ public partial class ReviewPlanViewModel : ObservableObject
 
     [RelayCommand]
     private void Back() => _navigation.GoBack();
-
-    private static string FormatBytes(long bytes)
-    {
-        string[] suffixes = ["B", "KB", "MB", "GB", "TB"];
-        double value = bytes;
-        var i = 0;
-        while (value >= 1024 && i < suffixes.Length - 1)
-        {
-            value /= 1024;
-            i++;
-        }
-
-        return $"{value:0.##} {suffixes[i]}";
-    }
 }

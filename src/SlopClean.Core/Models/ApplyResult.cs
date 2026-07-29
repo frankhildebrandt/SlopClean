@@ -11,9 +11,15 @@ public sealed record ApplyResult(
     public static ApplyResult Succeeded(string actionId, string findingId, long bytesFreed, string message, string? restoreTokenId = null)
         => new(actionId, findingId, ApplyOutcome.Succeeded, bytesFreed, message, restoreTokenId);
 
+    public static ApplyResult SucceededRebootRequired(string actionId, string findingId, long bytesFreed, string message, string? restoreTokenId = null)
+        => new(actionId, findingId, ApplyOutcome.SucceededRebootRequired, bytesFreed, message, restoreTokenId);
+
     public static ApplyResult Skipped(string actionId, string findingId, string message)
         => new(actionId, findingId, ApplyOutcome.Skipped, 0, message);
 
     public static ApplyResult Failed(string actionId, string findingId, string message)
         => new(actionId, findingId, ApplyOutcome.Failed, 0, message);
+
+    public bool IsSuccessful
+        => Outcome is ApplyOutcome.Succeeded or ApplyOutcome.SucceededRebootRequired;
 }

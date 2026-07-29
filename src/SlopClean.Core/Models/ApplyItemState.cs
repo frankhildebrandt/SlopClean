@@ -7,5 +7,6 @@ public enum ApplyItemState
     Succeeded = 2,
     Skipped = 3,
     Failed = 4,
-    Cancelled = 5
+    Cancelled = 5,
+    SucceededRebootRequired = 6
 }

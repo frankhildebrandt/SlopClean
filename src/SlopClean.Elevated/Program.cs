@@ -7,28 +7,52 @@ using SlopClean.Core.Safety;
 using SlopClean.Platform.Windows;
 using static SlopClean.Platform.Windows.ElevatedPrivilegeBroker;
 
-if (args.Length < 2 || !string.Equals(args[0], "--pipe", StringComparison.OrdinalIgnoreCase))
+if (!TryParseArgs(args, out var pipeName, out var sessionNonce))
 {
-    Console.Error.WriteLine("Usage: SlopClean.Elevated --pipe <name>");
+    Console.Error.WriteLine("Usage: SlopClean.Elevated --pipe <name> --nonce <nonce>");
     return 1;
 }
 
-var pipeName = args[1].Trim('"');
 var fileSystem = new WindowsFileSystem();
 var registry = new WindowsRegistryStore();
 var recycleBin = new WindowsRecycleBinService();
+var driverStore = new WindowsDriverStore();
 var safety = new SafetyPolicy(fileSystem);
 
 try
 {
-    await using var client = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
-    // UI process may still be setting up the server after UAC; allow a longer connect window.
-    await client.ConnectAsync(60_000).ConfigureAwait(false);
+    // Helper owns the pipe server and sends the first IPC frame (ready). The UI connects as client.
+    await using var server = NamedPipeServerStreamAcl.Create(
+        pipeName,
+        PipeDirection.InOut,
+        1,
+        PipeTransmissionMode.Byte,
+        PipeOptions.Asynchronous,
+        0,
+        0,
+        CreatePipeSecurity());
+
+    // Allow the medium-IL UI process to connect to this high-IL pipe.
+    PipeIntegrity.SetLowMandatoryLabel(server.SafePipeHandle);
+
+    using var connectCts = new CancellationTokenSource(TimeSpan.FromSeconds(60));
+    await server.WaitForConnectionAsync(connectCts.Token).ConfigureAwait(false);
+
+    var ready = new ElevatedReady
+    {
+        Kind = "ready",
+        Nonce = sessionNonce,
+        Pid = Environment.ProcessId
+    };
+    var readyBytes = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(ready));
+    await server.WriteAsync(BitConverter.GetBytes(readyBytes.Length)).ConfigureAwait(false);
+    await server.WriteAsync(readyBytes).ConfigureAwait(false);
+    await server.FlushAsync().ConfigureAwait(false);
 
     while (true)
     {
         var lengthBuffer = new byte[sizeof(int)];
-        await ReadExactAsync(client, lengthBuffer).ConfigureAwait(false);
+        await ReadExactAsync(server, lengthBuffer).ConfigureAwait(false);
         var requestLength = BitConverter.ToInt32(lengthBuffer, 0);
         if (requestLength == 0)
         {
@@ -41,7 +65,7 @@ try
         }
 
         var requestBuffer = new byte[requestLength];
-        await ReadExactAsync(client, requestBuffer).ConfigureAwait(false);
+        await ReadExactAsync(server, requestBuffer).ConfigureAwait(false);
         var request = JsonSerializer.Deserialize<ElevatedRequest>(Encoding.UTF8.GetString(requestBuffer));
         if (request?.Action is null || string.IsNullOrWhiteSpace(request.Nonce))
         {
@@ -68,11 +92,11 @@ try
             }
             else
             {
-                result = Execute(request.Action, fileSystem, registry, recycleBin);
+                result = Execute(request.Action, fileSystem, registry, recycleBin, driverStore);
             }
         }
 
-        await WriteResponseAsync(client, request.Nonce, result).ConfigureAwait(false);
+        await WriteResponseAsync(server, request.Nonce, result).ConfigureAwait(false);
     }
 }
 catch (Exception ex)
@@ -81,16 +105,40 @@ catch (Exception ex)
     return 10;
 }
 
+static bool TryParseArgs(string[] args, out string pipeName, out string sessionNonce)
+{
+    pipeName = "";
+    sessionNonce = "";
+    for (var i = 0; i < args.Length - 1; i++)
+    {
+        if (string.Equals(args[i], "--pipe", StringComparison.OrdinalIgnoreCase))
+        {
+            pipeName = args[i + 1].Trim('"');
+        }
+        else if (string.Equals(args[i], "--nonce", StringComparison.OrdinalIgnoreCase))
+        {
+            sessionNonce = args[i + 1].Trim('"');
+        }
+    }
+
+    return !string.IsNullOrWhiteSpace(pipeName) && !string.IsNullOrWhiteSpace(sessionNonce);
+}
+
 static ApplyResult Execute(
     OptimizationAction action,
     IFileSystem fileSystem,
     IRegistryStore registry,
-    IRecycleBinService recycleBin)
+    IRecycleBinService recycleBin,
+    IDriverStore driverStore)
 {
     try
     {
         switch (action.OperationCode)
         {
+            case PrivilegedOperationCodes.DeleteDriverPackage:
+            case PrivilegedOperationCodes.RestoreDriverPackage:
+                return DriverPackageElevatedOperations.Execute(action, driverStore);
+
             case PrivilegedOperationCodes.DeleteFile:
                 if (string.IsNullOrWhiteSpace(action.Path) || !fileSystem.FileExists(action.Path))
                 {
