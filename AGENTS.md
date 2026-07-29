@@ -158,4 +158,4 @@ GitHub Actions: `CI` (push), `PR` (pull requests), `Release` (tags `v*.*.*` / ma
 - Do not add ads, telemetry, or remote calls.
 - Match existing naming, DI registration patterns, and control-first UI structure.
 - After substantive changes: run tests (and App build if UI/platform touched).
-- Commit only when the user asks; never force-push `master`/`main`.
+- Commit only when the user asks; never force-push `main`.
