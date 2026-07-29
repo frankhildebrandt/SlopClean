@@ -56,6 +56,8 @@ Use capability interfaces so modules do not implement meaningless methods:
 
 Findings and actions are **immutable**. Actions carry `AllowedRoot`, `OperationCode`, and `RequiredPrivilege`. Unknown operation codes are rejected.
 
+**Module authoring skill:** Creating, renewing, or updating built-in modules follows [`.cursor/skills/slopclean-modules/SKILL.md`](.cursor/skills/slopclean-modules/SKILL.md). Whenever the module architecture, contracts, SafetyPolicy/operation-code rules, DI registration, elevation model, test layout, or related best practices change, update that skill (and its `reference.md`) in the same change set so agents stay aligned with the codebase.
+
 ### Engine and scheduling
 
 - `OptimizationEngine` orchestrates scan/apply, cancellation, and safety checks.
