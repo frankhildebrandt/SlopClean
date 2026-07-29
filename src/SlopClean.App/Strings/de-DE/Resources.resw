@@ -23,7 +23,7 @@
   <data name="OssSerilogExcerpt" xml:space="preserve"><value>Strukturiertes lokales Logging mit rotierenden, pfadredigierten Sinks — ohne Telemetrie.</value></data>
   <data name="OssEventLogExcerpt" xml:space="preserve"><value>Liest lokale Windows-Ereignisprotokolle (Code-Integrity-Signale) für die Kernisolierungs-Treiberanalyse — ohne Netzwerkzugriff.</value></data>
   <data name="ModuleCoreIsolationDriversName" xml:space="preserve"><value>Kernisolierungs-Treiber</value></data>
-  <data name="ModuleCoreIsolationDriversDescription" xml:space="preserve"><value>Findet OEM-Treiberpakete, die Code Integrity als inkompatibel mit Speicherintegrität meldet — ähnlich wie Windows-Sicherheit. Optionale Orphan-Bereinigung nur per Opt-in; In-use-Blocker nur mit expliziter Freigabe.</value></data>
+  <data name="ModuleCoreIsolationDriversDescription" xml:space="preserve"><value>Findet OEM-Treiberpakete, die mit Speicherintegrität inkompatibel sind (Code-Integrity-Ereignisse und lokale HVCI-Prüfung, z. B. beschreibbare+ausführbare Sections) — ähnlich wie Windows-Sicherheit. Optionale Orphan-Bereinigung nur per Opt-in; In-use-Blocker nur mit expliziter Freigabe.</value></data>
   <data name="CoreIsolationAllowInUseWarning" xml:space="preserve"><value>WARNUNG: Entfernt Treiberpakete, die noch Geräten zugeordnet sind. Risiko von BSOD oder defekter Hardware. Wiederherstellen stellt das Paket nur bereit (Gerätebindung nicht garantiert).</value></data>
   <data name="ApplyRebootRequired" xml:space="preserve"><value>Erfolgreich — Neustart erforderlich</value></data>
   <data name="DriverRestoreBestEffort" xml:space="preserve"><value>Die Wiederherstellung von Treiberpaketen ist best effort und stellt die Gerätebindung möglicherweise nicht wieder her.</value></data>

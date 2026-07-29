@@ -14,6 +14,7 @@ public sealed class CoreIsolationDriversModule : IScannableModule, IApplicableMo
     private readonly IDriverStore _driverStore;
     private readonly IDeviceGuardStatus _deviceGuard;
     private readonly ICodeIntegrityInspector _codeIntegrity;
+    private readonly IHvciCompatibilityInspector _hvci;
     private readonly BoolParameter _includeDebugDetails;
     private readonly BoolParameter _allowRemoveInUseBlockers;
     private readonly BoolParameter _includeOrphanOemPackages;
@@ -21,11 +22,13 @@ public sealed class CoreIsolationDriversModule : IScannableModule, IApplicableMo
     public CoreIsolationDriversModule(
         IDriverStore driverStore,
         IDeviceGuardStatus deviceGuard,
-        ICodeIntegrityInspector codeIntegrity)
+        ICodeIntegrityInspector codeIntegrity,
+        IHvciCompatibilityInspector hvci)
     {
         _driverStore = driverStore;
         _deviceGuard = deviceGuard;
         _codeIntegrity = codeIntegrity;
+        _hvci = hvci;
         _includeDebugDetails = new BoolParameter(
             "IncludeDebugDetails",
             "Debug details",
@@ -34,7 +37,7 @@ public sealed class CoreIsolationDriversModule : IScannableModule, IApplicableMo
         _allowRemoveInUseBlockers = new BoolParameter(
             "AllowRemoveInUseBlockers",
             "Allow remove in-use blockers",
-            "WARNING: Removes CI-reported packages still bound to devices. Risk of BSOD or broken hardware. Prefer vendor updates. Restore re-stages the package only (device binding not guaranteed).",
+            "WARNING: Removes CI/HVCI-reported packages still bound to devices. Risk of BSOD or broken hardware. Prefer vendor updates. Restore re-stages the package only (device binding not guaranteed).",
             defaultValue: false);
         _includeOrphanOemPackages = new BoolParameter(
             "IncludeOrphanOemPackages",
@@ -46,7 +49,7 @@ public sealed class CoreIsolationDriversModule : IScannableModule, IApplicableMo
     public string Id => ModuleId;
     public string Name => "Core Isolation Drivers";
     public string Description =>
-        "Finds OEM driver packages reported by Code Integrity / Memory Integrity as incompatible. Optional orphan OEM cleanup is opt-in; in-use CI blockers require explicit allow.";
+        "Finds OEM driver packages incompatible with Memory Integrity via Code Integrity events and local HVCI heuristics (e.g. writable+executable sections). Optional orphan OEM cleanup is opt-in; in-use blockers require explicit allow.";
     public ModuleCategory Category => ModuleCategory.Cleanup;
     public IReadOnlyList<IModuleParameter> Parameters =>
     [
@@ -64,7 +67,7 @@ public sealed class CoreIsolationDriversModule : IScannableModule, IApplicableMo
         var allowInUse = _allowRemoveInUseBlockers.Resolve(parameters);
         var includeOrphans = _includeOrphanOemPackages.Resolve(parameters);
 
-        progress?.Report(new ScanProgress(ModuleId, "Reading Device Guard status…", 0, 3));
+        progress?.Report(new ScanProgress(ModuleId, "Reading Device Guard status…", 0, 4));
         var status = _deviceGuard.GetSnapshot();
         yield return CoreIsolationDriverFindingBuilder.BuildStatusFinding(status, includeDebug);
 
@@ -84,7 +87,7 @@ public sealed class CoreIsolationDriversModule : IScannableModule, IApplicableMo
                 AllowedRoot: null);
         }
 
-        progress?.Report(new ScanProgress(ModuleId, "Enumerating OEM driver packages…", 1, 3));
+        progress?.Report(new ScanProgress(ModuleId, "Enumerating OEM driver packages…", 1, 4));
         if (!_driverStore.IsEnumerationAvailable)
         {
             yield return CoreIsolationDriverFindingBuilder.Degraded(
@@ -102,7 +105,7 @@ public sealed class CoreIsolationDriversModule : IScannableModule, IApplicableMo
             yield break;
         }
 
-        progress?.Report(new ScanProgress(ModuleId, "Reading Code Integrity signals…", 2, 3));
+        progress?.Report(new ScanProgress(ModuleId, "Reading Code Integrity signals…", 2, 4));
         var ci = _codeIntegrity.ReadObservedSignals(CiLookback, cancellationToken);
         if (!ci.IsAvailable)
         {
@@ -114,7 +117,7 @@ public sealed class CoreIsolationDriversModule : IScannableModule, IApplicableMo
                 Path: null,
                 SizeBytes: 0,
                 Risk: FindingRisk.Informational,
-                Details: $"{ci.FailureReason} Without CI signals, only optional orphan package cleanup can run. This is not a complete Memory Integrity incompatibility scan.",
+                Details: $"{ci.FailureReason} Continuing with local Memory Integrity heuristics on OEM driver images.",
                 IsActionable: false,
                 RequiredPrivilege: RequiredPrivilege.None,
                 AllowedRoot: null);
@@ -158,6 +161,53 @@ public sealed class CoreIsolationDriversModule : IScannableModule, IApplicableMo
                     allowInUse,
                     includeDebug);
             }
+        }
+
+        progress?.Report(new ScanProgress(ModuleId, "Analyzing OEM driver images for HVCI issues…", 3, 4));
+        var analyzed = 0;
+        foreach (var package in enumeration.Packages)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            analyzed++;
+            if (analyzed % 10 == 0)
+            {
+                progress?.Report(new ScanProgress(
+                    ModuleId,
+                    $"Analyzing {package.PublishedName}",
+                    analyzed,
+                    enumeration.Packages.Count));
+            }
+
+            if (matchedPublished.Contains(package.PublishedName))
+            {
+                continue;
+            }
+
+            if (CriticalDriverClassGuids.IsDenied(package.ClassGuid)
+                || package.IsBootCritical
+                || package.Provider.Contains("Microsoft", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            if (!TryFindHvciIncompatibleImage(package, out var imageName, out var reason))
+            {
+                continue;
+            }
+
+            matchedPublished.Add(package.PublishedName);
+            var signal = new CodeIntegritySignal(
+                EventId: 0,
+                TimestampUtc: DateTimeOffset.UtcNow,
+                ImageFileName: imageName,
+                Publisher: package.Provider,
+                RawMessage: reason);
+            yield return CoreIsolationDriverFindingBuilder.BuildBlockerFinding(
+                package,
+                signal,
+                allowInUse,
+                includeDebug);
+            await Task.Yield();
         }
 
         if (!includeOrphans)
@@ -211,5 +261,32 @@ public sealed class CoreIsolationDriversModule : IScannableModule, IApplicableMo
         }
 
         return Task.FromResult(ApplyResult.Failed(action.Id, action.FindingId, "Unsupported operation for this module."));
+    }
+
+    private bool TryFindHvciIncompatibleImage(
+        OemDriverPackage package,
+        out string imageName,
+        out string reason)
+    {
+        imageName = "";
+        reason = "";
+        foreach (var image in package.ImageFileNames)
+        {
+            foreach (var path in DriverImagePathResolver.CandidatePaths(image))
+            {
+                var analysis = _hvci.AnalyzeDriverImage(path);
+                if (!analysis.Analyzed || !analysis.IsIncompatibleWithMemoryIntegrity)
+                {
+                    continue;
+                }
+
+                imageName = image;
+                reason = analysis.Reason
+                         ?? "Local analysis reports the driver image as incompatible with Memory Integrity.";
+                return true;
+            }
+        }
+
+        return false;
     }
 }

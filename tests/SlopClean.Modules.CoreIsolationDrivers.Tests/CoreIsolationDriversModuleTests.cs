@@ -305,6 +305,35 @@ public class CoreIsolationDriversModuleTests
         Assert.Contains("elevated", result.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public async Task Local_hvci_analysis_finds_system_class_logitech_style_package()
+    {
+        var package = new OemDriverPackage(
+            PublishedName: "oem55.inf",
+            OriginalName: "lgbusenum.inf",
+            Provider: "Logitech",
+            ClassGuid: CriticalDriverClassGuids.System,
+            PackageFingerprint: "fp-55",
+            AssociatedDeviceInstanceIds: [],
+            ConnectedDeviceCount: 0,
+            DisconnectedDeviceCount: 0,
+            IsBootCritical: false,
+            ClassName: "System",
+            DriverVersion: "8.85.75.0",
+            DriverDate: new DateOnly(2016, 6, 13),
+            ReferencedImageFileNames: ["LGBusEnum.sys", "LGJoyXlCore.sys"]);
+
+        var hvci = new FakeHvci(incompatibleImages: ["LGBusEnum.sys"]);
+        var module = CreateModule([package], signals: [], hvci: hvci);
+        var findings = await ScanAsync(module, allowInUse: true, includeDebug: false);
+
+        var blocker = Assert.Single(findings, f => f.Id.Contains("blocker", StringComparison.Ordinal));
+        Assert.True(blocker.IsActionable);
+        Assert.Contains("LGBusEnum.sys", blocker.DisplayName, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("writable+executable", blocker.Details, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("oem55.inf", blocker.Path);
+    }
+
     private static async Task<List<ScanFinding>> ScanAsync(
         CoreIsolationDriversModule module,
         bool allowInUse = false,
@@ -329,11 +358,13 @@ public class CoreIsolationDriversModuleTests
     private static CoreIsolationDriversModule CreateModule(
         IReadOnlyList<OemDriverPackage>? packages = null,
         IReadOnlyList<CodeIntegritySignal>? signals = null,
-        bool enumerationFailed = false)
+        bool enumerationFailed = false,
+        IHvciCompatibilityInspector? hvci = null)
         => new(
             new FakeDriverStore(packages ?? [], enumerationFailed),
             new FakeDeviceGuard(),
-            new FakeCodeIntegrity(signals ?? []));
+            new FakeCodeIntegrity(signals ?? []),
+            hvci ?? new FakeHvci());
 
     private static OemDriverPackage Orphan(string published, string original, string provider)
         => new(published, original, provider, MediaClass, $"fp-{published}", [], 0, 0, false, 1234);
@@ -353,7 +384,7 @@ public class CoreIsolationDriversModuleTests
         public DriverPackageMutationResult ExportPackage(string publishedName, string destinationDirectory)
             => DriverPackageMutationResult.Ok("exported");
 
-        public DriverPackageMutationResult DeletePackage(string publishedName, bool uninstallFromDevices)
+        public DriverPackageMutationResult DeletePackage(string publishedName, bool uninstallFromDevices, bool force = false)
             => DriverPackageMutationResult.Ok("deleted");
 
         public DriverPackageMutationResult AddPackage(string infPath)
@@ -375,5 +406,21 @@ public class CoreIsolationDriversModuleTests
     {
         public CodeIntegrityInspectionResult ReadObservedSignals(TimeSpan lookback, CancellationToken cancellationToken = default)
             => CodeIntegrityInspectionResult.Available(signals);
+    }
+
+    private sealed class FakeHvci(IReadOnlyList<string>? incompatibleImages = null) : IHvciCompatibilityInspector
+    {
+        private readonly HashSet<string> _incompatible = new(
+            incompatibleImages ?? [],
+            StringComparer.OrdinalIgnoreCase);
+
+        public HvciImageAnalysis AnalyzeDriverImage(string imagePath)
+        {
+            var name = Path.GetFileName(imagePath);
+            return _incompatible.Contains(name)
+                ? HvciImageAnalysis.Incompatible(
+                    "Driver image has a writable+executable section (incompatible with Memory Integrity / HVCI).")
+                : HvciImageAnalysis.Compatible();
+        }
     }
 }

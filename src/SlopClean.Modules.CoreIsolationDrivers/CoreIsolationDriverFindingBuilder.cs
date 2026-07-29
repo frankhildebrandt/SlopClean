@@ -73,7 +73,15 @@ internal static class CoreIsolationDriverFindingBuilder
     {
         var details = new StringBuilder();
         CoreIsolationDriverIdentityFormatter.AppendHumanReadableSummary(details, package, signal.ImageFileName);
-        details.Append(" Why: Code Integrity reports this driver as incompatible with Memory Integrity (observed signal, not a full HVCI scan).");
+        if (signal.EventId == 0)
+        {
+            details.Append(" Why: ").Append(signal.RawMessage)
+                .Append(" (local Memory Integrity heuristic; not a full Microsoft hvciscan).");
+        }
+        else
+        {
+            details.Append(" Why: Code Integrity reports this driver as incompatible with Memory Integrity (observed signal, not a full HVCI scan).");
+        }
 
         var bound = package.TotalDeviceCount > 0;
         if (bound && allowInUse)

@@ -12,7 +12,7 @@ public interface IDriverStore
 
     DriverPackageMutationResult ExportPackage(string publishedName, string destinationDirectory);
 
-    DriverPackageMutationResult DeletePackage(string publishedName, bool uninstallFromDevices);
+    DriverPackageMutationResult DeletePackage(string publishedName, bool uninstallFromDevices, bool force = false);
 
     DriverPackageMutationResult AddPackage(string infPath);
 }

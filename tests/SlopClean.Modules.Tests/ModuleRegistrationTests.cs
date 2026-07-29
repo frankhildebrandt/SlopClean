@@ -49,6 +49,7 @@ public class ModuleRegistrationTests
         services.AddSingleton<IDriverStore, EmptyDriverStore>();
         services.AddSingleton<IDeviceGuardStatus, EmptyDeviceGuardStatus>();
         services.AddSingleton<ICodeIntegrityInspector, EmptyCodeIntegrityInspector>();
+        services.AddSingleton<IHvciCompatibilityInspector, EmptyHvciCompatibilityInspector>();
         services.AddSingleton<IPrivilegeBroker, EmptyPrivilegeBroker>();
     }
 
@@ -88,7 +89,7 @@ public class ModuleRegistrationTests
         public OemDriverPackage? FindPackage(string publishedName) => null;
         public DriverPackageMutationResult ExportPackage(string publishedName, string destinationDirectory)
             => DriverPackageMutationResult.Ok("exported");
-        public DriverPackageMutationResult DeletePackage(string publishedName, bool uninstallFromDevices)
+        public DriverPackageMutationResult DeletePackage(string publishedName, bool uninstallFromDevices, bool force = false)
             => DriverPackageMutationResult.Ok("deleted");
         public DriverPackageMutationResult AddPackage(string infPath)
             => DriverPackageMutationResult.Ok("added");
@@ -109,6 +110,12 @@ public class ModuleRegistrationTests
     {
         public CodeIntegrityInspectionResult ReadObservedSignals(TimeSpan lookback, CancellationToken cancellationToken = default)
             => CodeIntegrityInspectionResult.Available([]);
+    }
+
+    private sealed class EmptyHvciCompatibilityInspector : IHvciCompatibilityInspector
+    {
+        public HvciImageAnalysis AnalyzeDriverImage(string imagePath)
+            => HvciImageAnalysis.Compatible();
     }
 
     private sealed class EmptyPrivilegeBroker : IPrivilegeBroker

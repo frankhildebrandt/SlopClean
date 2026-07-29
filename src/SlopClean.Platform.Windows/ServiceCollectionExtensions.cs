@@ -17,6 +17,7 @@ public static class SlopCleanPlatformServiceCollectionExtensions
         services.AddSingleton<IDriverStore, WindowsDriverStore>();
         services.AddSingleton<IDeviceGuardStatus, WindowsDeviceGuardStatus>();
         services.AddSingleton<ICodeIntegrityInspector, WindowsCodeIntegrityInspector>();
+        services.AddSingleton<IHvciCompatibilityInspector, PeHvciCompatibilityInspector>();
         return services;
     }
 }

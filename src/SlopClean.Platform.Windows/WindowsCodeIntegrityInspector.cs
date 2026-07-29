@@ -7,10 +7,11 @@ namespace SlopClean.Platform.Windows;
 
 public sealed partial class WindowsCodeIntegrityInspector : ICodeIntegrityInspector
 {
-    // Observed HVCI / CI load policy events commonly seen when incompatible drivers are blocked or audited.
-    private static readonly HashSet<int> WatchedEventIds = [3023, 3033, 3076, 3077, 3082, 3083, 3089, 3099];
+    // Observed HVCI / CI load policy events. 3087 is the Memory Integrity compatibility event family.
+    // 3033/3089 are noisy (often user-mode DLL loads) and are intentionally omitted.
+    private static readonly HashSet<int> WatchedEventIds = [3023, 3074, 3076, 3077, 3082, 3083, 3087, 3099, 3111];
 
-    [GeneratedRegex(@"[\\/](?<file>[^\\/]+\.sys)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    [GeneratedRegex(@"(?:[\\/]|^|\s)(?<file>[A-Za-z0-9][A-Za-z0-9._-]*\.sys)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex SysFileRegex();
 
     public CodeIntegrityInspectionResult ReadObservedSignals(TimeSpan lookback, CancellationToken cancellationToken = default)

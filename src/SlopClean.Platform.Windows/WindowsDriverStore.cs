@@ -17,7 +17,6 @@ public sealed partial class WindowsDriverStore : IDriverStore
         CriticalDriverClassGuids.DiskDrive,
         CriticalDriverClassGuids.Hdc,
         CriticalDriverClassGuids.ScsiAdapter,
-        CriticalDriverClassGuids.System,
         CriticalDriverClassGuids.Volume,
         CriticalDriverClassGuids.VolumeSnapshot,
         CriticalDriverClassGuids.Processor
@@ -148,7 +147,7 @@ public sealed partial class WindowsDriverStore : IDriverStore
         return PnPUtilRunner.Run(["/export-driver", publishedName, destinationDirectory]);
     }
 
-    public DriverPackageMutationResult DeletePackage(string publishedName, bool uninstallFromDevices)
+    public DriverPackageMutationResult DeletePackage(string publishedName, bool uninstallFromDevices, bool force = false)
     {
         if (!DriverPackageEligibility.IsOemPublishedName(publishedName))
         {
@@ -159,6 +158,11 @@ public sealed partial class WindowsDriverStore : IDriverStore
         if (uninstallFromDevices)
         {
             args.Add("/uninstall");
+        }
+
+        if (force)
+        {
+            args.Add("/force");
         }
 
         return PnPUtilRunner.Run(args);

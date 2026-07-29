@@ -45,6 +45,19 @@ public class DriverPackageEligibilityTests
     }
 
     [Fact]
+    public void Allows_system_class_oem_used_by_memory_integrity_blockers()
+    {
+        var result = _policy.ValidateAction(CreateDeleteAction(
+            publishedName: "oem55.inf",
+            classGuid: CriticalDriverClassGuids.System.ToString(),
+            removalMode: DriverPackagePayloadKeys.RemovalModeInUse,
+            allowInUse: true,
+            provider: "Logitech"));
+
+        Assert.True(result.IsAllowed);
+    }
+
+    [Fact]
     public void Denies_in_use_without_allowInUse()
     {
         var result = _policy.ValidateAction(CreateDeleteAction(

@@ -2,6 +2,8 @@ namespace SlopClean.Core.Safety;
 
 /// <summary>
 /// Well-known device setup class GUIDs that must never be deleted by SlopClean.
+/// Note: System ({4d36e97d-...}) is intentionally not denied — many Memory Integrity
+/// blockers (e.g. Logitech bus/filter packages) use that class without being boot-critical.
 /// </summary>
 public static class CriticalDriverClassGuids
 {
@@ -20,7 +22,6 @@ public static class CriticalDriverClassGuids
         DiskDrive,
         Hdc,
         ScsiAdapter,
-        System,
         Volume,
         VolumeSnapshot,
         Processor

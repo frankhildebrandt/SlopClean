@@ -76,18 +76,30 @@ public static class DriverPackageElevatedOperations
             packageDir);
         DriverPackageIdentity.Write(packageDir, identity);
 
-        // pnputil rejects deletes while any device still references the INF. Opt-in AllowInUse
-        // adds /uninstall for orphan and in-use removals alike (still no /force).
+        // Opt-in AllowInUse: try /uninstall first; if devices still hold the INF, retry with /force
+        // (same pattern as common Memory Integrity cleanup guides). Backup was already exported.
         var uninstall = allowInUse;
-        var delete = driverStore.DeletePackage(published, uninstallFromDevices: uninstall);
-        if (!delete.Succeeded)
+        var delete = driverStore.DeletePackage(published, uninstallFromDevices: uninstall, force: false);
+        var usedForce = false;
+        if (!delete.Succeeded && allowInUse)
+        {
+            delete = driverStore.DeletePackage(published, uninstallFromDevices: true, force: true);
+            usedForce = delete.Succeeded;
+            if (!delete.Succeeded)
+            {
+                return ApplyResult.Failed(action.Id, action.FindingId, $"Driver delete failed: {delete.Message}");
+            }
+        }
+        else if (!delete.Succeeded)
         {
             return ApplyResult.Failed(action.Id, action.FindingId, $"Driver delete failed: {delete.Message}");
         }
 
-        var message = uninstall
-            ? "Driver package uninstalled and removed (restore is best-effort for device binding)."
-            : "Orphan driver package removed.";
+        var message = usedForce
+            ? "Driver package removed with /uninstall /force (restore is best-effort for device binding)."
+            : uninstall
+                ? "Driver package uninstalled and removed (restore is best-effort for device binding)."
+                : "Orphan driver package removed.";
         if (delete.RebootRequired || export.RebootRequired)
         {
             return ApplyResult.SucceededRebootRequired(action.Id, action.FindingId, live.ApproximateSizeBytes, message + " Reboot required.");

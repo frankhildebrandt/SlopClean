@@ -50,6 +50,37 @@ public class DriverPackageElevatedOperationsTests
 
             Assert.True(result.IsSuccessful);
             Assert.False(store.LastUninstallFromDevices);
+            Assert.False(store.LastForce);
+            Assert.Equal(1, store.DeleteCallCount);
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Delete_with_allow_in_use_retries_with_force_when_uninstall_fails()
+    {
+        var store = new RecordingDriverStore(
+            CreatePackage("oem55.inf", connected: 0, disconnected: 0),
+            failUntilForce: true);
+        var dir = CreateTempDir();
+        try
+        {
+            var action = CreateDeleteAction(
+                "oem55.inf",
+                removalMode: DriverPackagePayloadKeys.RemovalModeInUse,
+                allowInUse: true,
+                packageDir: dir);
+
+            var result = DriverPackageElevatedOperations.Execute(action, store);
+
+            Assert.True(result.IsSuccessful);
+            Assert.Equal(2, store.DeleteCallCount);
+            Assert.True(store.LastUninstallFromDevices);
+            Assert.True(store.LastForce);
+            Assert.Contains("/force", result.Message, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {
@@ -105,9 +136,11 @@ public class DriverPackageElevatedOperationsTests
                 [DriverPackagePayloadKeys.RestorePayloadDirectory] = packageDir
             });
 
-    private sealed class RecordingDriverStore(OemDriverPackage package) : IDriverStore
+    private sealed class RecordingDriverStore(OemDriverPackage package, bool failUntilForce = false) : IDriverStore
     {
         public bool? LastUninstallFromDevices { get; private set; }
+        public bool? LastForce { get; private set; }
+        public int DeleteCallCount { get; private set; }
 
         public bool IsEnumerationAvailable => true;
 
@@ -120,10 +153,18 @@ public class DriverPackageElevatedOperationsTests
         public DriverPackageMutationResult ExportPackage(string publishedName, string destinationDirectory)
             => DriverPackageMutationResult.Ok("exported");
 
-        public DriverPackageMutationResult DeletePackage(string publishedName, bool uninstallFromDevices)
+        public DriverPackageMutationResult DeletePackage(string publishedName, bool uninstallFromDevices, bool force = false)
         {
+            DeleteCallCount++;
             LastUninstallFromDevices = uninstallFromDevices;
-            return DriverPackageMutationResult.Ok(uninstallFromDevices ? "uninstalled" : "deleted");
+            LastForce = force;
+            if (failUntilForce && !force)
+            {
+                return DriverPackageMutationResult.Fail(
+                    "Fehler beim Löschen des Treiberpakets: Ein oder mehrere, zur Zeit installierte Geräte verwenden die angegebene INF.");
+            }
+
+            return DriverPackageMutationResult.Ok(force ? "forced" : uninstallFromDevices ? "uninstalled" : "deleted");
         }
 
         public DriverPackageMutationResult AddPackage(string infPath)
