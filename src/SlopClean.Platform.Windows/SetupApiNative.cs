@@ -6,11 +6,14 @@ internal static class SetupApiNative
 {
     public const uint DigcfAllClasses = 0x00000004;
     public const uint DigcfPresent = 0x00000002;
+    public const uint SpdrpDeviceDesc = 0x00000000;
     public const uint SpdrpHardwareId = 0x00000001;
+    public const uint SpdrpService = 0x00000004;
+    public const uint SpdrpClass = 0x00000007;
     public const uint SpdrpClassGuid = 0x00000008;
     public const uint SpdrpDriver = 0x00000009;
     public const uint SpdrpMfg = 0x0000000B;
-    public const uint SpdrpService = 0x00000004;
+    public const uint SpdrpFriendlyName = 0x0000000C;
 
     public static readonly DEVPROPKEY DeviceDriverInfPath = new(
         new Guid("a8b865dd-2e3d-4094-ad97-e593a70c75d6"),

@@ -30,6 +30,54 @@ public class CoreIsolationDriversModuleTests
     }
 
     [Fact]
+    public async Task Finding_details_include_hardware_usage_version_and_age()
+    {
+        var package = new OemDriverPackage(
+            PublishedName: "oem40.inf",
+            OriginalName: "contoso.inf",
+            Provider: "Contoso",
+            ClassGuid: MediaClass,
+            PackageFingerprint: "fp-40",
+            AssociatedDeviceInstanceIds: ["USB\\VID_1234&PID_5678\\1"],
+            ConnectedDeviceCount: 1,
+            DisconnectedDeviceCount: 0,
+            IsBootCritical: false,
+            ApproximateSizeBytes: 2048,
+            ClassName: "Media",
+            DriverVersion: "1.2.3.4",
+            DriverDate: new DateOnly(2022, 6, 15),
+            InfLastWriteUtc: new DateTimeOffset(2022, 6, 16, 0, 0, 0, TimeSpan.Zero),
+            AssociatedDevices:
+            [
+                new OemDriverAssociatedDevice(
+                    "USB\\VID_1234&PID_5678\\1",
+                    "Contoso USB Sound Adapter",
+                    "USB Audio Device",
+                    IsPresent: true)
+            ]);
+
+        var signal = new CodeIntegritySignal(
+            3089,
+            DateTimeOffset.UtcNow,
+            "contoso.sys",
+            null,
+            "oem40.inf blocked for contoso.sys");
+
+        var module = CreateModule([package], [signal]);
+        var findings = await ScanAsync(module, allowInUse: false, includeDebug: false);
+        var blocker = Assert.Single(findings, f => f.Id.Contains("blocker", StringComparison.Ordinal));
+
+        Assert.Contains("Hardware:", blocker.Details, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Contoso USB Sound Adapter", blocker.Details, StringComparison.Ordinal);
+        Assert.Contains("In use:", blocker.Details, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("yes", blocker.Details, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Version:", blocker.Details, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("1.2.3.4", blocker.Details, StringComparison.Ordinal);
+        Assert.Contains("2022-06-15", blocker.Details, StringComparison.Ordinal);
+        Assert.Contains("Age:", blocker.Details, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task Disconnected_device_prevents_orphan_classification()
     {
         var module = CreateModule(

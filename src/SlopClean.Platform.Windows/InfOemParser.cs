@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.RegularExpressions;
 
 namespace SlopClean.Platform.Windows;
@@ -9,6 +10,9 @@ public static partial class InfOemParser
 
     [GeneratedRegex(@"^\s*ClassGUID\s*=\s*\{?(?<v>[0-9A-Fa-f-]{36})\}?\s*$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex ClassGuidRegex();
+
+    [GeneratedRegex(@"^\s*Class\s*=\s*%?(?<v>[^%\r\n]+)%?\s*$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex ClassRegex();
 
     [GeneratedRegex(@"^\s*DriverVer\s*=\s*(?<v>.+?)\s*$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex DriverVerRegex();
@@ -23,8 +27,9 @@ public static partial class InfOemParser
         {
             var lines = File.ReadAllLines(infPath);
             string? providerToken = null;
+            string? classToken = null;
             Guid classGuid = Guid.Empty;
-            string? driverVer = null;
+            string? driverVerRaw = null;
             var inStrings = false;
             var strings = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
@@ -60,6 +65,13 @@ public static partial class InfOemParser
                     continue;
                 }
 
+                var classMatch = ClassRegex().Match(line);
+                if (classMatch.Success)
+                {
+                    classToken = classMatch.Groups["v"].Value.Trim().Trim('"');
+                    continue;
+                }
+
                 var cm = ClassGuidRegex().Match(line);
                 if (cm.Success && Guid.TryParse(cm.Groups["v"].Value, out var g))
                 {
@@ -70,21 +82,40 @@ public static partial class InfOemParser
                 var dm = DriverVerRegex().Match(line);
                 if (dm.Success)
                 {
-                    driverVer = dm.Groups["v"].Value.Trim();
+                    driverVerRaw = dm.Groups["v"].Value.Trim();
                 }
             }
 
-            var provider = providerToken ?? "Unknown";
-            if (strings.TryGetValue(provider, out var resolved))
-            {
-                provider = resolved;
-            }
+            var provider = ResolveString(providerToken, strings) ?? "Unknown";
+            var className = ResolveString(classToken, strings);
+            ParseDriverVer(driverVerRaw, out var driverDate, out var driverVersion);
 
             var fileName = Path.GetFileName(infPath);
-            var fingerprint = $"{fileName}|{provider}|{classGuid:D}|{driverVer ?? "?"}|{new FileInfo(infPath).Length}";
-            parsed = new ParsedOemInf(fileName, Path.GetFileNameWithoutExtension(fileName) + ".inf", provider, classGuid, fingerprint);
-            // Original name often equals published for oem; better from Catalog - keep published as file name.
-            parsed = parsed with { OriginalName = fileName };
+            DateTimeOffset? lastWrite = null;
+            long length = 0;
+            try
+            {
+                var info = new FileInfo(infPath);
+                length = info.Length;
+                lastWrite = info.LastWriteTimeUtc;
+            }
+            catch
+            {
+                // ignore
+            }
+
+            var fingerprint = $"{fileName}|{provider}|{classGuid:D}|{driverVerRaw ?? "?"}|{length}";
+            parsed = new ParsedOemInf(
+                PublishedName: fileName,
+                OriginalName: fileName,
+                Provider: provider,
+                ClassGuid: classGuid,
+                PackageFingerprint: fingerprint,
+                ClassName: className,
+                DriverVersion: driverVersion,
+                DriverDate: driverDate,
+                InfLastWriteUtc: lastWrite,
+                ApproximateSizeBytes: length);
             return classGuid != Guid.Empty;
         }
         catch
@@ -93,10 +124,56 @@ public static partial class InfOemParser
         }
     }
 
+    internal static void ParseDriverVer(string? raw, out DateOnly? date, out string? version)
+    {
+        date = null;
+        version = null;
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return;
+        }
+
+        var parts = raw.Split(',', 2, StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length >= 1
+            && DateOnly.TryParseExact(
+                parts[0],
+                ["M/d/yyyy", "MM/dd/yyyy", "yyyy-MM-dd"],
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.None,
+                out var parsedDate))
+        {
+            date = parsedDate;
+        }
+
+        if (parts.Length >= 2)
+        {
+            version = parts[1];
+        }
+        else if (date is null)
+        {
+            version = raw;
+        }
+    }
+
+    private static string? ResolveString(string? token, IReadOnlyDictionary<string, string> strings)
+    {
+        if (string.IsNullOrWhiteSpace(token))
+        {
+            return null;
+        }
+
+        return strings.TryGetValue(token, out var resolved) ? resolved : token;
+    }
+
     public sealed record ParsedOemInf(
         string PublishedName,
         string OriginalName,
         string Provider,
         Guid ClassGuid,
-        string PackageFingerprint);
+        string PackageFingerprint,
+        string? ClassName,
+        string? DriverVersion,
+        DateOnly? DriverDate,
+        DateTimeOffset? InfLastWriteUtc,
+        long ApproximateSizeBytes);
 }

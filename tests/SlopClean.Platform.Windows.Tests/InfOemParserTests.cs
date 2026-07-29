@@ -29,6 +29,9 @@ public class InfOemParserTests
             Assert.Equal("oem99.inf", parsed.PublishedName);
             Assert.Equal("Contoso Audio", parsed.Provider);
             Assert.Equal(Guid.Parse("4d36e96c-e325-11ce-bfc1-08002be10318"), parsed.ClassGuid);
+            Assert.Equal("Media", parsed.ClassName);
+            Assert.Equal("1.0.0.0", parsed.DriverVersion);
+            Assert.Equal(new DateOnly(2024, 1, 1), parsed.DriverDate);
             Assert.Contains("oem99.inf", parsed.PackageFingerprint, StringComparison.OrdinalIgnoreCase);
         }
         finally

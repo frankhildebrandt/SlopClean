@@ -75,17 +75,19 @@ public sealed partial class WindowsDriverStore : IDriverStore
                 devices ??= [];
                 var connected = devices.Count(d => d.IsPresent);
                 var disconnected = devices.Count - connected;
-                var instanceIds = devices.Select(d => d.InstanceId).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+                var associated = devices
+                    .GroupBy(d => d.InstanceId, StringComparer.OrdinalIgnoreCase)
+                    .Select(g => g.First())
+                    .Select(d => new OemDriverAssociatedDevice(
+                        d.InstanceId,
+                        d.FriendlyName,
+                        d.Description,
+                        d.IsPresent))
+                    .ToArray();
+                var instanceIds = associated.Select(d => d.InstanceId).ToArray();
                 var bootCritical = BootCriticalClasses.Contains(parsed.ClassGuid);
-                long size = 0;
-                try
-                {
-                    size = new FileInfo(infPath).Length;
-                }
-                catch
-                {
-                    // ignore
-                }
+                var className = parsed.ClassName
+                    ?? devices.Select(d => d.ClassName).FirstOrDefault(static c => !string.IsNullOrWhiteSpace(c));
 
                 packages.Add(new OemDriverPackage(
                     PublishedName: parsed.PublishedName,
@@ -97,7 +99,12 @@ public sealed partial class WindowsDriverStore : IDriverStore
                     ConnectedDeviceCount: connected,
                     DisconnectedDeviceCount: disconnected,
                     IsBootCritical: bootCritical,
-                    ApproximateSizeBytes: size));
+                    ApproximateSizeBytes: parsed.ApproximateSizeBytes,
+                    ClassName: className,
+                    DriverVersion: parsed.DriverVersion,
+                    DriverDate: parsed.DriverDate,
+                    InfLastWriteUtc: parsed.InfLastWriteUtc,
+                    AssociatedDevices: associated));
             }
 
             return DriverStoreEnumerationResult.Succeeded(packages);
@@ -208,7 +215,12 @@ public sealed partial class WindowsDriverStore : IDriverStore
                     map[published] = list;
                 }
 
-                list.Add(new DeviceAssoc(instanceId, isPresent));
+                list.Add(new DeviceAssoc(
+                    instanceId,
+                    isPresent,
+                    GetDeviceRegistryPropertyString(set, ref data, SpdrpFriendlyName),
+                    GetDeviceRegistryPropertyString(set, ref data, SpdrpDeviceDesc),
+                    GetDeviceRegistryPropertyString(set, ref data, SpdrpClass)));
             }
 
             return map;
@@ -272,5 +284,35 @@ public sealed partial class WindowsDriverStore : IDriverStore
         return Encoding.Unicode.GetString(buffer).TrimEnd('\0');
     }
 
-    private sealed record DeviceAssoc(string InstanceId, bool IsPresent);
+    private static string? GetDeviceRegistryPropertyString(IntPtr set, ref SP_DEVINFO_DATA data, uint property)
+    {
+        if (!SetupDiGetDeviceRegistryPropertyW(set, ref data, property, out _, null, 0, out var required)
+            && required == 0)
+        {
+            return null;
+        }
+
+        var buffer = new byte[Math.Max(required, 2)];
+        if (!SetupDiGetDeviceRegistryPropertyW(set, ref data, property, out _, buffer, (uint)buffer.Length, out _))
+        {
+            return null;
+        }
+
+        var text = Encoding.Unicode.GetString(buffer).TrimEnd('\0', '\u0000');
+        // MULTI_SZ hardware IDs etc. — take first segment.
+        var nullIndex = text.IndexOf('\0');
+        if (nullIndex >= 0)
+        {
+            text = text[..nullIndex];
+        }
+
+        return string.IsNullOrWhiteSpace(text) ? null : text.Trim();
+    }
+
+    private sealed record DeviceAssoc(
+        string InstanceId,
+        bool IsPresent,
+        string? FriendlyName,
+        string? Description,
+        string? ClassName);
 }
