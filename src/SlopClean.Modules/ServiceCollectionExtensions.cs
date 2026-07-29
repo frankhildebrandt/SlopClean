@@ -1,7 +1,10 @@
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using SlopClean.Core.Backup;
 using SlopClean.Core.Engine;
 using SlopClean.Core.Modules;
+using SlopClean.Core.Planning;
 using SlopClean.Core.Safety;
+using SlopClean.Core.Settings;
 using SlopClean.Modules;
 
 namespace Microsoft.Extensions.DependencyInjection;
@@ -12,6 +15,10 @@ public static class SlopCleanModulesServiceCollectionExtensions
     {
         services.TryAddSingleton<SafetyPolicy>();
         services.TryAddSingleton<DriveScanScheduler>();
+        services.TryAddSingleton<IAppSettingsStore, AppSettingsStore>();
+        services.TryAddSingleton<IRestorePointStore, RestorePointStore>();
+        services.TryAddSingleton<IBackupService, BackupService>();
+        services.TryAddSingleton<IOptimizationPlanSession, OptimizationPlanSession>();
 
         services.AddSingleton<IModule, TempCleanerModule>();
         services.AddSingleton<IModule, RecycleBinModule>();

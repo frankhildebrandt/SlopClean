@@ -1,4 +1,6 @@
+using System.Runtime.CompilerServices;
 using SlopClean.Core.Abstractions;
+using SlopClean.Core.Backup;
 using SlopClean.Core.Models;
 using SlopClean.Core.Modules;
 using SlopClean.Core.Parameters;
@@ -12,24 +14,30 @@ public sealed class OptimizationEngine
     private readonly SafetyPolicy _safetyPolicy;
     private readonly IPrivilegeBroker _privilegeBroker;
     private readonly DriveScanScheduler _scheduler;
+    private readonly IBackupService? _backupService;
+    private readonly IRestorePointStore? _restorePointStore;
 
     public OptimizationEngine(
         ModuleRegistry registry,
         SafetyPolicy safetyPolicy,
         IPrivilegeBroker privilegeBroker,
-        DriveScanScheduler? scheduler = null)
+        DriveScanScheduler? scheduler = null,
+        IBackupService? backupService = null,
+        IRestorePointStore? restorePointStore = null)
     {
         _registry = registry;
         _safetyPolicy = safetyPolicy;
         _privilegeBroker = privilegeBroker;
         _scheduler = scheduler ?? new DriveScanScheduler();
+        _backupService = backupService;
+        _restorePointStore = restorePointStore;
     }
 
     public async IAsyncEnumerable<ScanFinding> ScanModuleAsync(
         string moduleId,
         IReadOnlyDictionary<string, object?>? parameters,
         IProgress<ScanProgress>? progress,
-        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
+        [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         var module = _registry.GetRequired<IScannableModule>(moduleId);
         var resolved = ParameterValidator.WithDefaults(module.Parameters, parameters);
@@ -77,21 +85,52 @@ public sealed class OptimizationEngine
         return results;
     }
 
-    public async Task<IReadOnlyList<ApplyResult>> ApplySelectedAsync(
+    public Task<IReadOnlyList<ApplyResult>> ApplySelectedAsync(
         IEnumerable<OptimizationAction> actions,
+        CancellationToken cancellationToken)
+        => ApplyActionsAsync(actions, displayNames: null, cancellationToken);
+
+    public Task<IReadOnlyList<ApplyResult>> ApplyPlanAsync(
+        OptimizationPlan plan,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(plan);
+        var actions = plan.Changes.Select(c => c.Action);
+        var names = plan.Changes.ToDictionary(c => c.Action.Id, c => c.DisplayName);
+        return ApplyActionsAsync(actions, names, cancellationToken);
+    }
+
+    public async Task<ApplyResult> RestoreAsync(string restoreId, CancellationToken cancellationToken)
+    {
+        if (_backupService is null)
+        {
+            return ApplyResult.Failed(restoreId, restoreId, "Backup service is not configured.");
+        }
+
+        return await _backupService.RestoreAsync(restoreId, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<IReadOnlyList<ApplyResult>> ApplyActionsAsync(
+        IEnumerable<OptimizationAction> actions,
+        IReadOnlyDictionary<string, string>? displayNames,
         CancellationToken cancellationToken)
     {
         var results = new List<ApplyResult>();
         foreach (var action in actions)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            results.Add(await ApplyOneAsync(action, cancellationToken).ConfigureAwait(false));
+            string? displayName = null;
+            displayNames?.TryGetValue(action.Id, out displayName);
+            results.Add(await ApplyOneAsync(action, displayName, cancellationToken).ConfigureAwait(false));
         }
 
         return results;
     }
 
-    private async Task<ApplyResult> ApplyOneAsync(OptimizationAction action, CancellationToken cancellationToken)
+    private async Task<ApplyResult> ApplyOneAsync(
+        OptimizationAction action,
+        string? displayName,
+        CancellationToken cancellationToken)
     {
         var validation = _safetyPolicy.ValidateAction(action);
         if (!validation.IsAllowed)
@@ -99,16 +138,17 @@ public sealed class OptimizationEngine
             return ApplyResult.Skipped(action.Id, action.FindingId, validation.Reason ?? "Blocked by safety policy.");
         }
 
+        RestorePointManifest? restorePoint = null;
         try
         {
-            string? restoreId = null;
-            var module = _registry.GetRequired(action.ModuleId);
-            if (module is IReversibleModule reversible)
+            if (_backupService is not null && _backupService.CanCreateBackup(action))
             {
-                var token = await reversible.CreateRestoreAsync(action, cancellationToken).ConfigureAwait(false);
-                restoreId = token.Id;
+                restorePoint = await _backupService
+                    .CreatePendingBackupAsync(action, displayName, cancellationToken)
+                    .ConfigureAwait(false);
             }
 
+            var module = _registry.GetRequired(action.ModuleId);
             ApplyResult result;
             if (action.RequiredPrivilege == RequiredPrivilege.Elevated)
             {
@@ -120,17 +160,38 @@ public sealed class OptimizationEngine
             }
             else
             {
-                return ApplyResult.Failed(action.Id, action.FindingId, "Module cannot apply actions.");
+                result = ApplyResult.Failed(action.Id, action.FindingId, "Module cannot apply actions.");
             }
 
-            return result with { RestoreTokenId = restoreId ?? result.RestoreTokenId };
+            if (restorePoint is not null && _restorePointStore is not null)
+            {
+                if (result.Outcome == ApplyOutcome.Succeeded)
+                {
+                    await _restorePointStore.CommitAsync(restorePoint.Id, cancellationToken).ConfigureAwait(false);
+                    return result with { RestoreTokenId = restorePoint.Id };
+                }
+
+                await _restorePointStore.DiscardAsync(restorePoint.Id, cancellationToken).ConfigureAwait(false);
+            }
+
+            return result;
         }
         catch (OperationCanceledException)
         {
+            if (restorePoint is not null && _restorePointStore is not null)
+            {
+                await _restorePointStore.DiscardAsync(restorePoint.Id, CancellationToken.None).ConfigureAwait(false);
+            }
+
             throw;
         }
         catch (Exception ex)
         {
+            if (restorePoint is not null && _restorePointStore is not null)
+            {
+                await _restorePointStore.DiscardAsync(restorePoint.Id, CancellationToken.None).ConfigureAwait(false);
+            }
+
             return ApplyResult.Failed(action.Id, action.FindingId, ex.Message);
         }
     }

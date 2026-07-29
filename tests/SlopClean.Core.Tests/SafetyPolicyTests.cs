@@ -147,4 +147,24 @@ public class SafetyPolicyTests
 
         Assert.False(_policy.ValidateAction(action).IsAllowed);
     }
+
+    [Fact]
+    public void Allows_appdata_leftover_folder_under_local_root_but_not_the_root()
+    {
+        _fs.AddDirectory(@"C:\Users\Test\AppData\Local\GoneApp");
+
+        var leftover = new OptimizationAction(
+            "1", "uninstall-cleanup", "f1", PrivilegedOperationCodes.DeleteDirectory,
+            @"C:\Users\Test\AppData\Local\GoneApp",
+            @"C:\Users\Test\AppData\Local",
+            RequiredPrivilege.None);
+        Assert.True(_policy.ValidateAction(leftover).IsAllowed);
+
+        var root = new OptimizationAction(
+            "2", "uninstall-cleanup", "f2", PrivilegedOperationCodes.DeleteDirectory,
+            @"C:\Users\Test\AppData\Local",
+            @"C:\Users\Test\AppData\Local",
+            RequiredPrivilege.None);
+        Assert.False(_policy.ValidateAction(root).IsAllowed);
+    }
 }

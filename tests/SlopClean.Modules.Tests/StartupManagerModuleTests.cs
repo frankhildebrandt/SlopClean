@@ -1,5 +1,9 @@
 using SlopClean.Core.Abstractions;
+using SlopClean.Core.Backup;
+using SlopClean.Core.Engine;
 using SlopClean.Core.Models;
+using SlopClean.Core.Safety;
+using SlopClean.Core.Settings;
 using SlopClean.Modules;
 using SlopClean.Modules.Tests.Fakes;
 
@@ -16,7 +20,7 @@ public class StartupManagerModuleTests
             new RegistryValueInfo("MyApp", @"C:\Apps\MyApp.exe", "String")
         ];
 
-        var module = new StartupManagerModule(registry, CreateFs(), Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N")));
+        var module = new StartupManagerModule(registry, CreateFs());
         var findings = new List<ScanFinding>();
         await foreach (var finding in module.ScanAsync(new Dictionary<string, object?>(), null, CancellationToken.None))
         {
@@ -27,17 +31,27 @@ public class StartupManagerModuleTests
     }
 
     [Fact]
-    public async Task Disable_and_restore_registry_entry_roundtrips()
+    public async Task Disable_and_restore_registry_entry_roundtrips_via_engine_backup()
     {
-        var registry = new FakeRegistry();
+        var fs = CreateFs();
+        var registry = new FakeRegistry(fs);
         var key = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Run";
         registry.Values[(RegistryHiveKind.CurrentUser, key)] =
         [
             new RegistryValueInfo("MyApp", @"C:\Apps\MyApp.exe", "String")
         ];
 
-        var stateDir = Path.Combine(Path.GetTempPath(), "SlopCleanStartupTests", Guid.NewGuid().ToString("N"));
-        var module = new StartupManagerModule(registry, CreateFs(), stateDir);
+        var module = new StartupManagerModule(registry, fs);
+        var settings = new InMemorySettingsStore(@"C:\Backups");
+        var store = new RestorePointStore(fs, settings);
+        var backup = new BackupService(fs, registry, store, new SafetyPolicy(fs));
+        var engine = new OptimizationEngine(
+            new ModuleRegistry([module]),
+            new SafetyPolicy(fs),
+            new NoBroker(),
+            backupService: backup,
+            restorePointStore: store);
+
         var action = new OptimizationAction(
             "a1",
             StartupManagerModule.ModuleId,
@@ -55,12 +69,11 @@ public class StartupManagerModuleTests
                 ["kind"] = "registry"
             });
 
-        var token = await module.CreateRestoreAsync(action, CancellationToken.None);
-        var apply = await module.ApplyAsync(action, CancellationToken.None);
-        Assert.Equal(ApplyOutcome.Succeeded, apply.Outcome);
+        var results = await engine.ApplySelectedAsync([action], CancellationToken.None);
+        Assert.Equal(ApplyOutcome.Succeeded, results[0].Outcome);
         Assert.Empty(registry.GetValues(RegistryHiveKind.CurrentUser, key));
 
-        var restore = await module.RestoreAsync(token, CancellationToken.None);
+        var restore = await engine.RestoreAsync(results[0].RestoreTokenId!, CancellationToken.None);
         Assert.Equal(ApplyOutcome.Succeeded, restore.Outcome);
         Assert.Contains(registry.GetValues(RegistryHiveKind.CurrentUser, key), v => v.Name == "MyApp");
     }
@@ -80,11 +93,39 @@ public class StartupManagerModuleTests
         fs.Folders[SpecialFolderKind.CommonStartup] = @"C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Startup";
         fs.AddDirectory(fs.Folders[SpecialFolderKind.Startup]);
         fs.AddDirectory(fs.Folders[SpecialFolderKind.CommonStartup]);
+        fs.AddDirectory(@"C:\Backups");
         return fs;
+    }
+
+    private sealed class NoBroker : IPrivilegeBroker
+    {
+        public Task<ApplyResult> ExecuteElevatedAsync(OptimizationAction action, CancellationToken cancellationToken)
+            => Task.FromResult(ApplyResult.Failed(action.Id, action.FindingId, "not expected"));
+    }
+
+    private sealed class InMemorySettingsStore(string backupDirectory) : IAppSettingsStore
+    {
+        public AppSettings Current { get; private set; } = new() { BackupDirectory = backupDirectory };
+
+        public Task<AppSettings> LoadAsync(CancellationToken cancellationToken = default)
+            => Task.FromResult(Current);
+
+        public Task SaveAsync(AppSettings settings, CancellationToken cancellationToken = default)
+        {
+            Current = settings;
+            return Task.CompletedTask;
+        }
     }
 
     private sealed class FakeRegistry : IRegistryStore
     {
+        private readonly IFileSystem? _fileSystem;
+
+        public FakeRegistry(IFileSystem? fileSystem = null)
+        {
+            _fileSystem = fileSystem;
+        }
+
         public Dictionary<(RegistryHiveKind Hive, string SubKey), List<RegistryValueInfo>> Values { get; } = new();
         public Dictionary<(RegistryHiveKind Hive, string SubKey), List<string>> SubKeys { get; } = new();
 
@@ -121,7 +162,17 @@ public class StartupManagerModuleTests
 
         public string ExportKey(RegistryHiveKind hive, string subKey, string destinationFile)
         {
-            File.WriteAllText(destinationFile, "Windows Registry Editor Version 5.00");
+            if (_fileSystem is not null)
+            {
+                _fileSystem.CreateDirectory(Path.GetDirectoryName(destinationFile)!);
+                _fileSystem.WriteAllText(destinationFile, "Windows Registry Editor Version 5.00");
+            }
+            else
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(destinationFile)!);
+                File.WriteAllText(destinationFile, "Windows Registry Editor Version 5.00");
+            }
+
             return destinationFile;
         }
     }

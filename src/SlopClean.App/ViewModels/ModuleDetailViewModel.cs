@@ -3,9 +3,12 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Dispatching;
+using SlopClean.App.Pages;
+using SlopClean.App.Services;
 using SlopClean.Core.Engine;
 using SlopClean.Core.Models;
 using SlopClean.Core.Modules;
+using SlopClean.Core.Planning;
 using SlopClean.Core.Presets;
 
 namespace SlopClean.App.ViewModels;
@@ -14,6 +17,8 @@ public partial class ModuleDetailViewModel : ObservableObject
 {
     private readonly OptimizationEngine _engine;
     private readonly ModuleRegistry _registry;
+    private readonly IOptimizationPlanSession _planSession;
+    private readonly INavigationService _navigation;
     private readonly PresetStore _presets = new();
     private readonly ILogger<ModuleDetailViewModel> _logger;
     private CancellationTokenSource? _cts;
@@ -22,10 +27,14 @@ public partial class ModuleDetailViewModel : ObservableObject
     public ModuleDetailViewModel(
         OptimizationEngine engine,
         ModuleRegistry registry,
+        IOptimizationPlanSession planSession,
+        INavigationService navigation,
         ILogger<ModuleDetailViewModel> logger)
     {
         _engine = engine;
         _registry = registry;
+        _planSession = planSession;
+        _navigation = navigation;
         _logger = logger;
     }
 
@@ -45,7 +54,7 @@ public partial class ModuleDetailViewModel : ObservableObject
     public partial string StatusText { get; set; } = "";
 
     [ObservableProperty]
-    public partial bool CanApply { get; set; }
+    public partial bool CanReview { get; set; }
 
     public async Task InitializeAsync(string moduleId)
     {
@@ -67,7 +76,7 @@ public partial class ModuleDetailViewModel : ObservableObject
             Parameters.Add(vm);
         }
 
-        CanApply = _module is IApplicableModule;
+        CanReview = _module is IApplicableModule;
         StatusText = "Ready";
     }
 
@@ -119,7 +128,7 @@ public partial class ModuleDetailViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private async Task ApplySelectedAsync()
+    private void ReviewSelected()
     {
         if (_module is not IApplicableModule)
         {
@@ -133,33 +142,10 @@ public partial class ModuleDetailViewModel : ObservableObject
             return;
         }
 
-        _cts?.Cancel();
-        _cts = new CancellationTokenSource();
-        IsBusy = true;
-        StatusText = "Applying…";
-
-        try
-        {
-            var actions = selected.Select(f => OptimizationAction.FromFinding(f)).ToArray();
-            var results = await _engine.ApplySelectedAsync(actions, _cts.Token);
-            var freed = results.Sum(r => r.BytesFreed);
-            var succeeded = results.Count(r => r.Outcome == ApplyOutcome.Succeeded);
-            StatusText = $"Done — {succeeded}/{results.Count} succeeded, freed {freed} bytes";
-            await ScanAsync();
-        }
-        catch (OperationCanceledException)
-        {
-            StatusText = "Apply cancelled";
-        }
-        catch (Exception ex)
-        {
-            StatusText = $"Apply failed: {ex.Message}";
-            _logger.LogError(ex, "Apply failed for {ModuleId}", _module?.Id);
-        }
-        finally
-        {
-            IsBusy = false;
-        }
+        var plan = OptimizationPlan.FromFindings(_module.Id, _module.Name, selected);
+        _planSession.Set(plan);
+        _navigation.Navigate(typeof(ReviewPlanPage));
+        StatusText = $"Reviewing {plan.Changes.Count} change(s)";
     }
 
     [RelayCommand]

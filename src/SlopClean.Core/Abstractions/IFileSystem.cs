@@ -11,6 +11,11 @@ public interface IFileSystem
     long GetDirectorySize(string path, CancellationToken cancellationToken = default);
     void DeleteFile(string path);
     void DeleteDirectory(string path, bool recursive);
+    void CreateDirectory(string path);
+    void CopyFile(string sourcePath, string destinationPath, bool overwrite = true);
+    void MoveFile(string sourcePath, string destinationPath, bool overwrite = true);
+    void WriteAllText(string path, string contents);
+    string ReadAllText(string path);
     string GetFullPath(string path);
     string GetTempPath();
     string GetFolderPath(SpecialFolderKind folder);

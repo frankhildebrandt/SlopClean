@@ -1,9 +1,11 @@
 using SlopClean.Core.Abstractions;
+using SlopClean.Core.Backup;
 using SlopClean.Core.Engine;
 using SlopClean.Core.Models;
 using SlopClean.Core.Modules;
 using SlopClean.Core.Parameters;
 using SlopClean.Core.Safety;
+using SlopClean.Core.Settings;
 using SlopClean.Core.Tests.Fakes;
 
 namespace SlopClean.Core.Tests;
@@ -15,10 +17,7 @@ public class OptimizationEngineTests
     {
         var fs = CreateFs();
         var module = new DeletingModule(fs);
-        var engine = new OptimizationEngine(
-            new ModuleRegistry([module]),
-            new SafetyPolicy(fs),
-            new FakeBroker());
+        var engine = CreateEngine(fs, module, new FakeBroker());
 
         var result = await engine.ApplySelectedAsync(
         [
@@ -42,10 +41,7 @@ public class OptimizationEngineTests
         var fs = CreateFs();
         var module = new DeletingModule(fs);
         var broker = new FakeBroker();
-        var engine = new OptimizationEngine(
-            new ModuleRegistry([module]),
-            new SafetyPolicy(fs),
-            broker);
+        var engine = CreateEngine(fs, module, broker);
 
         fs.AddFile(@"C:\Windows\Temp\a.tmp", 10);
         var result = await engine.ApplySelectedAsync(
@@ -66,14 +62,80 @@ public class OptimizationEngineTests
     }
 
     [Fact]
+    public async Task Apply_commits_restore_point_only_on_success()
+    {
+        var fs = CreateFs();
+        fs.AddFile(@"C:\Users\Test\AppData\Local\Temp\a.tmp", 10);
+        var module = new DeletingModule(fs);
+        var settings = new InMemorySettingsStore(@"C:\Backups");
+        var store = new RestorePointStore(fs, settings);
+        var backup = new BackupService(fs, new FakeRegistryStore(fs), store, new SafetyPolicy(fs));
+        var engine = new OptimizationEngine(
+            new ModuleRegistry([module]),
+            new SafetyPolicy(fs),
+            new FakeBroker(),
+            backupService: backup,
+            restorePointStore: store);
+
+        var result = await engine.ApplySelectedAsync(
+        [
+            new OptimizationAction(
+                "a1",
+                module.Id,
+                "f1",
+                PrivilegedOperationCodes.DeleteFile,
+                @"C:\Users\Test\AppData\Local\Temp\a.tmp",
+                @"C:\Users\Test\AppData\Local\Temp",
+                RequiredPrivilege.None)
+        ], CancellationToken.None);
+
+        Assert.Equal(ApplyOutcome.Succeeded, result[0].Outcome);
+        Assert.False(string.IsNullOrWhiteSpace(result[0].RestoreTokenId));
+        var committed = await store.ListCommittedAsync();
+        Assert.Contains(committed, m => m.Id == result[0].RestoreTokenId);
+
+        var restore = await engine.RestoreAsync(result[0].RestoreTokenId!, CancellationToken.None);
+        Assert.Equal(ApplyOutcome.Succeeded, restore.Outcome);
+        Assert.True(fs.FileExists(@"C:\Users\Test\AppData\Local\Temp\a.tmp"));
+    }
+
+    [Fact]
+    public async Task ApplyPlan_discards_backup_when_apply_fails()
+    {
+        var fs = CreateFs();
+        fs.AddFile(@"C:\Users\Test\AppData\Local\Temp\a.tmp", 10);
+        var module = new FailingModule();
+        var settings = new InMemorySettingsStore(@"C:\Backups");
+        var store = new RestorePointStore(fs, settings);
+        var backup = new BackupService(fs, new FakeRegistryStore(fs), store, new SafetyPolicy(fs));
+        var engine = new OptimizationEngine(
+            new ModuleRegistry([module]),
+            new SafetyPolicy(fs),
+            new FakeBroker(),
+            backupService: backup,
+            restorePointStore: store);
+
+        var finding = new ScanFinding(
+            "f1", module.Id, "t", "a.tmp",
+            @"C:\Users\Test\AppData\Local\Temp\a.tmp", 10, FindingRisk.Low, "x",
+            true, RequiredPrivilege.None, @"C:\Users\Test\AppData\Local\Temp",
+            new Dictionary<string, string>
+            {
+                [OptimizationAction.OperationCodeMetadataKey] = PrivilegedOperationCodes.DeleteFile
+            });
+        var plan = OptimizationPlan.FromFindings(module.Id, module.Name, [finding]);
+        var result = await engine.ApplyPlanAsync(plan, CancellationToken.None);
+
+        Assert.Equal(ApplyOutcome.Failed, result[0].Outcome);
+        Assert.Empty(await store.ListCommittedAsync());
+    }
+
+    [Fact]
     public async Task Scan_is_cancelled_when_token_cancelled()
     {
         var fs = CreateFs();
         var module = new SlowScanModule();
-        var engine = new OptimizationEngine(
-            new ModuleRegistry([module]),
-            new SafetyPolicy(fs),
-            new FakeBroker());
+        var engine = CreateEngine(fs, module, new FakeBroker());
 
         using var cts = new CancellationTokenSource();
         await cts.CancelAsync();
@@ -85,6 +147,9 @@ public class OptimizationEngineTests
             }
         });
     }
+
+    private static OptimizationEngine CreateEngine(IFileSystem fs, IModule module, IPrivilegeBroker broker)
+        => new(new ModuleRegistry([module]), new SafetyPolicy(fs), broker);
 
     private static FakeFileSystem CreateFs()
     {
@@ -98,7 +163,23 @@ public class OptimizationEngineTests
         fs.Folders[SpecialFolderKind.UserTemp] = @"C:\Users\Test\AppData\Local\Temp";
         fs.Folders[SpecialFolderKind.WindowsTemp] = @"C:\Windows\Temp";
         fs.AddDirectory(@"C:\Windows\Temp");
+        fs.AddDirectory(@"C:\Users\Test\AppData\Local\Temp");
+        fs.AddDirectory(@"C:\Backups");
         return fs;
+    }
+
+    private sealed class InMemorySettingsStore(string backupDirectory) : IAppSettingsStore
+    {
+        public AppSettings Current { get; private set; } = new() { BackupDirectory = backupDirectory };
+
+        public Task<AppSettings> LoadAsync(CancellationToken cancellationToken = default)
+            => Task.FromResult(Current);
+
+        public Task SaveAsync(AppSettings settings, CancellationToken cancellationToken = default)
+        {
+            Current = settings;
+            return Task.CompletedTask;
+        }
     }
 
     private sealed class FakeBroker : IPrivilegeBroker
@@ -155,5 +236,26 @@ public class OptimizationEngineTests
             await Task.Delay(10, cancellationToken);
             yield break;
         }
+    }
+
+    private sealed class FailingModule : IScannableModule, IApplicableModule
+    {
+        public string Id => "failing";
+        public string Name => "Failing";
+        public string Description => "";
+        public ModuleCategory Category => ModuleCategory.Cleanup;
+        public IReadOnlyList<IModuleParameter> Parameters => [];
+
+        public async IAsyncEnumerable<ScanFinding> ScanAsync(
+            IReadOnlyDictionary<string, object?> parameters,
+            IProgress<ScanProgress>? progress,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
+        {
+            await Task.Yield();
+            yield break;
+        }
+
+        public Task<ApplyResult> ApplyAsync(OptimizationAction action, CancellationToken cancellationToken)
+            => Task.FromResult(ApplyResult.Failed(action.Id, action.FindingId, "boom"));
     }
 }

@@ -85,8 +85,10 @@ Never set `requireAdministrator` on the WinUI app.
 ### UI (control-first)
 
 - Shell and Pages stay thin (composition + navigation).
-- Prefer domain-sized reusable controls (`ParameterForm`, `FindingList`, `ModuleCard`, `ScanProgressControl`).
+- Prefer domain-sized reusable controls (`ParameterForm`, `FindingList`, `ModuleCard`, `ScanProgressControl`, `PlannedChangeList`, `RestorePointList`).
 - One generic `ModuleDetailPage` driven by module contracts — not seven giant per-module pages.
+- Apply is never on the module page: Scan → select → **Review selected** → `ReviewPlanPage` → Apply.
+- `Restore` nav lists committed backups; Settings configures the backup directory.
 - Avoid micro-controls without a clear responsibility.
 - Large lists: virtualization / incremental results + cancellation.
 - UI strings: `.resw` (de-DE / en-US), not hard-coded sprawl in XAML.
@@ -100,7 +102,7 @@ Never set `requireAdministrator` on the WinUI app.
 | RecycleBin | Yes | Confirm before empty |
 | StartupManager | Yes | Disable/enable with restore; no hard delete in MVP |
 | DiskAnalyzer | No | Analysis only |
-| UninstallCleanup | Yes (conservative) | Orphaned uninstall/run entries only; AppData leftovers are **hints**, never auto-deleted |
+| UninstallCleanup | Yes (conservative) | Orphaned uninstall/run entries; matching AppData leftovers are sized and deletable only when explicitly selected; backups via central restore store |
 | ServiceAdvisor | No | Read-only curated JSON recommendations |
 
 ### Out of MVP
@@ -108,7 +110,7 @@ Never set `requireAdministrator` on the WinUI app.
 - External plugin DLLs
 - Cloud sync, accounts, telemetry, update ads
 - Aggressive registry/driver tweaks
-- Auto-deleting guessed program leftovers
+- Auto-deleting guessed program leftovers without an orphaned uninstall match and explicit selection
 - Changing Windows service start types
 - MSIX Store publishing (may follow)
 

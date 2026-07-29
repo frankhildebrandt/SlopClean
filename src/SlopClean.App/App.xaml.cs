@@ -7,6 +7,7 @@ using SlopClean.App.Services;
 using SlopClean.App.ViewModels;
 using SlopClean.Core.Logging;
 using SlopClean.Core.Safety;
+using SlopClean.Core.Settings;
 
 namespace SlopClean.App;
 
@@ -15,16 +16,41 @@ public partial class App : Application
     private Window? _window;
 
     public static IServiceProvider Services { get; private set; } = null!;
+    public static MainWindow? MainWindow { get; private set; }
 
     public App()
     {
         InitializeComponent();
+        UnhandledException += (_, e) =>
+        {
+            try
+            {
+                var logDirectory = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "SlopClean",
+                    "logs");
+                Directory.CreateDirectory(logDirectory);
+                File.AppendAllText(
+                    Path.Combine(logDirectory, "unhandled.log"),
+                    $"{DateTimeOffset.Now:O} {e.Message}{Environment.NewLine}{e.Exception}{Environment.NewLine}");
+            }
+            catch
+            {
+                // ignore logging failures
+            }
+
+            e.Handled = true;
+        };
         Services = ConfigureServices();
     }
 
-    protected override void OnLaunched(LaunchActivatedEventArgs args)
+    protected override async void OnLaunched(LaunchActivatedEventArgs args)
     {
+        var settings = Services.GetRequiredService<IAppSettingsStore>();
+        await settings.LoadAsync();
+
         _window = Services.GetRequiredService<MainWindow>();
+        MainWindow = (MainWindow)_window;
         _window.Activate();
     }
 
@@ -54,9 +80,12 @@ public partial class App : Application
         services.AddSlopCleanModules();
         services.AddSingleton<SafetyPolicy>();
         services.AddSingleton<ThemeService>();
+        services.AddSingleton<INavigationService, NavigationService>();
         services.AddSingleton<MainWindow>();
         services.AddTransient<DashboardViewModel>();
         services.AddTransient<ModuleDetailViewModel>();
+        services.AddTransient<ReviewPlanViewModel>();
+        services.AddTransient<RestoreViewModel>();
         services.AddTransient<SettingsViewModel>();
         return services.BuildServiceProvider();
     }
@@ -83,7 +112,6 @@ internal sealed class RedactingLoggerProvider : ILoggerProvider
             Exception? exception,
             Func<TState, Exception?, string> formatter)
         {
-            // Serilog already writes; this provider exists as a hook for future UI log sinks.
             _ = LogRedactor.Redact(formatter(state, exception));
         }
     }

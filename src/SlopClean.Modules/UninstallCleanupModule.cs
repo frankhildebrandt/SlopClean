@@ -1,14 +1,14 @@
 using System.Runtime.CompilerServices;
-using System.Text.Json;
 using System.Text.RegularExpressions;
 using SlopClean.Core.Abstractions;
 using SlopClean.Core.Models;
 using SlopClean.Core.Modules;
 using SlopClean.Core.Parameters;
+using SlopClean.Core.Safety;
 
 namespace SlopClean.Modules;
 
-public sealed class UninstallCleanupModule : IScannableModule, IReversibleModule
+public sealed class UninstallCleanupModule : IScannableModule, IApplicableModule
 {
     public const string ModuleId = "uninstall-cleanup";
 
@@ -20,22 +20,21 @@ public sealed class UninstallCleanupModule : IScannableModule, IReversibleModule
 
     private readonly IRegistryStore _registry;
     private readonly IFileSystem _fileSystem;
-    private readonly string _backupDirectory;
+    private readonly SafetyPolicy _safetyPolicy;
 
-    public UninstallCleanupModule(IRegistryStore registry, IFileSystem fileSystem, string? backupDirectory = null)
+    public UninstallCleanupModule(
+        IRegistryStore registry,
+        IFileSystem fileSystem,
+        SafetyPolicy safetyPolicy)
     {
         _registry = registry;
         _fileSystem = fileSystem;
-        _backupDirectory = backupDirectory
-            ?? Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "SlopClean",
-                "registry-backups");
+        _safetyPolicy = safetyPolicy;
     }
 
     public string Id => ModuleId;
     public string Name => "Uninstall Cleanup";
-    public string Description => "Finds leftover uninstall registry entries after programs were removed.";
+    public string Description => "Finds leftover uninstall registry entries and matching AppData folders after programs were removed.";
     public ModuleCategory Category => ModuleCategory.Uninstall;
     public IReadOnlyList<IModuleParameter> Parameters => [];
 
@@ -64,7 +63,6 @@ public sealed class UninstallCleanupModule : IScannableModule, IReversibleModule
                     var releaseType = _registry.GetStringValue(hive, subKey, "ReleaseType");
                     var bundleProvider = _registry.GetStringValue(hive, subKey, "BundleProviderKey");
 
-                    // Conservative exclusions.
                     if (systemComponent == "1"
                         || windowsInstaller == "1"
                         || !string.IsNullOrWhiteSpace(bundleProvider)
@@ -81,7 +79,6 @@ public sealed class UninstallCleanupModule : IScannableModule, IReversibleModule
                     var uninstallExists = !string.IsNullOrWhiteSpace(uninstallPath)
                         && (_fileSystem.FileExists(uninstallPath) || _fileSystem.DirectoryExists(uninstallPath));
 
-                    // Require BOTH install location and uninstall binary to be missing when install location was recorded.
                     var orphaned = !string.IsNullOrWhiteSpace(uninstallString)
                                    && !uninstallExists
                                    && (string.IsNullOrWhiteSpace(installLocation) || !installExists);
@@ -91,10 +88,9 @@ public sealed class UninstallCleanupModule : IScannableModule, IReversibleModule
                         continue;
                     }
 
-                    // Informational AppData hints — never auto-deletable.
-                    foreach (var hint in BuildAppDataHints(displayName))
+                    foreach (var leftover in BuildAppDataLeftovers(displayName, cancellationToken))
                     {
-                        yield return hint;
+                        yield return leftover;
                     }
 
                     yield return new ScanFinding(
@@ -122,7 +118,6 @@ public sealed class UninstallCleanupModule : IScannableModule, IReversibleModule
             }
         }
 
-        // Dead Run values whose target executable is gone.
         const string runKey = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Run";
         foreach (var hive in new[] { RegistryHiveKind.CurrentUser, RegistryHiveKind.LocalMachine })
         {
@@ -154,6 +149,7 @@ public sealed class UninstallCleanupModule : IScannableModule, IReversibleModule
                         ["hive"] = hive.ToString(),
                         ["subKey"] = runKey,
                         ["valueName"] = value.Name,
+                        ["valueData"] = value.Data ?? "",
                         ["kind"] = "value",
                         [OptimizationAction.OperationCodeMetadataKey] = PrivilegedOperationCodes.DeleteRegistryValue
                     });
@@ -166,6 +162,12 @@ public sealed class UninstallCleanupModule : IScannableModule, IReversibleModule
     public Task<ApplyResult> ApplyAsync(OptimizationAction action, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
+
+        if (action.OperationCode == PrivilegedOperationCodes.DeleteDirectory)
+        {
+            return ApplyDirectoryDeleteAsync(action, cancellationToken);
+        }
+
         try
         {
             if (action.Payload is null)
@@ -190,98 +192,85 @@ public sealed class UninstallCleanupModule : IScannableModule, IReversibleModule
         }
     }
 
-    public Task<RestoreToken> CreateRestoreAsync(OptimizationAction action, CancellationToken cancellationToken)
+    private Task<ApplyResult> ApplyDirectoryDeleteAsync(OptimizationAction action, CancellationToken cancellationToken)
     {
-        cancellationToken.ThrowIfCancellationRequested();
-        Directory.CreateDirectory(_backupDirectory);
-        var hive = Enum.Parse<RegistryHiveKind>(action.Payload!["hive"], true);
-        var subKey = action.Payload["subKey"];
-        var exportPath = Path.Combine(_backupDirectory, $"{Guid.NewGuid():N}.reg");
-        _registry.ExportKey(hive, subKey, exportPath);
+        var validation = _safetyPolicy.ValidateAction(action);
+        if (!validation.IsAllowed)
+        {
+            return Task.FromResult(ApplyResult.Skipped(action.Id, action.FindingId, validation.Reason ?? "Blocked."));
+        }
 
-        var token = new RestoreToken(
-            Id: Guid.NewGuid().ToString("N"),
-            ModuleId: ModuleId,
-            ActionId: action.Id,
-            CreatedUtc: DateTimeOffset.UtcNow,
-            Kind: "registry-export",
-            Data: new Dictionary<string, string>
-            {
-                ["exportPath"] = exportPath,
-                ["hive"] = hive.ToString(),
-                ["subKey"] = subKey
-            });
+        if (string.IsNullOrWhiteSpace(action.Path) || !_fileSystem.DirectoryExists(action.Path))
+        {
+            return Task.FromResult(ApplyResult.Skipped(action.Id, action.FindingId, "Directory no longer exists."));
+        }
 
-        File.WriteAllText(Path.Combine(_backupDirectory, $"{token.Id}.json"), JsonSerializer.Serialize(token));
-        return Task.FromResult(token);
-    }
-
-    public Task<ApplyResult> RestoreAsync(RestoreToken token, CancellationToken cancellationToken)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
         try
         {
-            if (!token.Data.TryGetValue("exportPath", out var exportPath) || !File.Exists(exportPath))
-            {
-                return Task.FromResult(ApplyResult.Failed(token.ActionId, token.Id, "Backup .reg file missing."));
-            }
-
-            var start = new System.Diagnostics.ProcessStartInfo
-            {
-                FileName = "reg.exe",
-                Arguments = $"import \"{exportPath}\"",
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                RedirectStandardError = true
-            };
-            using var process = System.Diagnostics.Process.Start(start)
-                ?? throw new InvalidOperationException("Failed to start reg.exe.");
-            process.WaitForExit();
-            if (process.ExitCode != 0)
-            {
-                return Task.FromResult(ApplyResult.Failed(token.ActionId, token.Id, process.StandardError.ReadToEnd()));
-            }
-
-            return Task.FromResult(ApplyResult.Succeeded(token.ActionId, token.Id, 0, "Registry backup restored."));
+            var size = _fileSystem.GetDirectorySize(action.Path, cancellationToken);
+            _fileSystem.DeleteDirectory(action.Path, recursive: true);
+            return Task.FromResult(ApplyResult.Succeeded(action.Id, action.FindingId, size, "AppData leftover folder deleted."));
         }
         catch (Exception ex)
         {
-            return Task.FromResult(ApplyResult.Failed(token.ActionId, token.Id, ex.Message));
+            return Task.FromResult(ApplyResult.Failed(action.Id, action.FindingId, ex.Message));
         }
     }
 
-    private IEnumerable<ScanFinding> BuildAppDataHints(string displayName)
+    private IEnumerable<ScanFinding> BuildAppDataLeftovers(string displayName, CancellationToken cancellationToken)
     {
         var safe = SanitizeName(displayName);
-        if (string.IsNullOrWhiteSpace(safe))
+        if (string.IsNullOrWhiteSpace(safe) || safe is "." or "..")
         {
             yield break;
         }
 
-        foreach (var kind in new[]
+        foreach (var (kind, elevated) in new[]
                  {
-                     SpecialFolderKind.LocalApplicationData,
-                     SpecialFolderKind.ApplicationData,
-                     SpecialFolderKind.CommonApplicationData
+                     (SpecialFolderKind.LocalApplicationData, false),
+                     (SpecialFolderKind.ApplicationData, false),
+                     (SpecialFolderKind.CommonApplicationData, true)
                  })
         {
-            var root = _fileSystem.GetFolderPath(kind);
-            var candidate = Path.Combine(root, safe);
-            if (_fileSystem.DirectoryExists(candidate))
+            cancellationToken.ThrowIfCancellationRequested();
+            var root = PathCanonicalizer.Canonicalize(_fileSystem.GetFolderPath(kind));
+            var candidate = PathCanonicalizer.Canonicalize(Path.Combine(root, safe));
+            if (!_fileSystem.DirectoryExists(candidate))
             {
-                yield return new ScanFinding(
-                    Id: $"{ModuleId}:hint:{kind}:{safe}",
-                    ModuleId: ModuleId,
-                    TargetId: "appdata-hint",
-                    DisplayName: $"Possible leftover folder: {safe}",
-                    Path: candidate,
-                    SizeBytes: _fileSystem.GetDirectorySize(candidate),
-                    Risk: FindingRisk.Informational,
-                    Details: "Shown for manual review only. SlopClean will not delete AppData leftovers automatically.",
-                    IsActionable: false,
-                    RequiredPrivilege: RequiredPrivilege.None,
-                    AllowedRoot: root);
+                continue;
             }
+
+            var dirInfo = _fileSystem.GetDirectoryInfo(candidate);
+            if (dirInfo?.IsReparsePoint == true)
+            {
+                continue;
+            }
+
+            var validation = _safetyPolicy.ValidateDeletePath(candidate, root);
+            if (!validation.IsAllowed)
+            {
+                continue;
+            }
+
+            var size = _fileSystem.GetDirectorySize(candidate, cancellationToken);
+            yield return new ScanFinding(
+                Id: $"{ModuleId}:leftover:{kind}:{safe}",
+                ModuleId: ModuleId,
+                TargetId: "appdata-leftover",
+                DisplayName: $"Leftover folder: {safe}",
+                Path: candidate,
+                SizeBytes: size,
+                Risk: FindingRisk.Medium,
+                Details: $"Matching AppData leftover for orphaned uninstall '{displayName}'. Size: {size} bytes. Select to delete.",
+                IsActionable: true,
+                RequiredPrivilege: elevated ? RequiredPrivilege.Elevated : RequiredPrivilege.None,
+                AllowedRoot: root,
+                Metadata: new Dictionary<string, string>
+                {
+                    ["displayName"] = displayName,
+                    ["folderKind"] = kind.ToString(),
+                    [OptimizationAction.OperationCodeMetadataKey] = PrivilegedOperationCodes.DeleteDirectory
+                });
         }
     }
 

@@ -1,5 +1,4 @@
 using System.Runtime.CompilerServices;
-using System.Text.Json;
 using SlopClean.Core.Abstractions;
 using SlopClean.Core.Models;
 using SlopClean.Core.Modules;
@@ -7,24 +6,18 @@ using SlopClean.Core.Parameters;
 
 namespace SlopClean.Modules;
 
-public sealed class StartupManagerModule : IScannableModule, IReversibleModule
+public sealed class StartupManagerModule : IScannableModule, IApplicableModule
 {
     public const string ModuleId = "startup-manager";
     private const string RunKey = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Run";
 
     private readonly IRegistryStore _registry;
     private readonly IFileSystem _fileSystem;
-    private readonly string _stateDirectory;
 
-    public StartupManagerModule(IRegistryStore registry, IFileSystem fileSystem, string? stateDirectory = null)
+    public StartupManagerModule(IRegistryStore registry, IFileSystem fileSystem)
     {
         _registry = registry;
         _fileSystem = fileSystem;
-        _stateDirectory = stateDirectory
-            ?? Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "SlopClean",
-                "startup-state");
     }
 
     public string Id => ModuleId;
@@ -106,7 +99,7 @@ public sealed class StartupManagerModule : IScannableModule, IReversibleModule
                         : new Dictionary<string, string>
                         {
                             ["kind"] = "shortcut",
-                            ["disabledPath"] = Path.Combine(_stateDirectory, "disabled", Path.GetFileName(file)),
+                            ["originalPath"] = file,
                             [OptimizationAction.OperationCodeMetadataKey] = PrivilegedOperationCodes.DisableStartupShortcut
                         });
             }
@@ -139,70 +132,13 @@ public sealed class StartupManagerModule : IScannableModule, IReversibleModule
                 return Task.FromResult(ApplyResult.Skipped(action.Id, action.FindingId, "Startup shortcut no longer exists."));
             }
 
-            var disabledDir = Path.Combine(_stateDirectory, "disabled");
-            Directory.CreateDirectory(disabledDir);
-            var destination = Path.Combine(disabledDir, Path.GetFileName(action.Path));
-            File.Move(action.Path, destination, overwrite: true);
+            // Engine creates a file backup before apply; disable by removing the shortcut.
+            _fileSystem.DeleteFile(action.Path);
             return Task.FromResult(ApplyResult.Succeeded(action.Id, action.FindingId, 0, "Startup shortcut disabled."));
         }
         catch (Exception ex)
         {
             return Task.FromResult(ApplyResult.Failed(action.Id, action.FindingId, ex.Message));
-        }
-    }
-
-    public Task<RestoreToken> CreateRestoreAsync(OptimizationAction action, CancellationToken cancellationToken)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        Directory.CreateDirectory(_stateDirectory);
-        var token = new RestoreToken(
-            Id: Guid.NewGuid().ToString("N"),
-            ModuleId: ModuleId,
-            ActionId: action.Id,
-            CreatedUtc: DateTimeOffset.UtcNow,
-            Kind: "startup",
-            Data: action.Payload?.ToDictionary(static kv => kv.Key, static kv => kv.Value)
-                  ?? new Dictionary<string, string>());
-
-        var path = Path.Combine(_stateDirectory, $"{token.Id}.json");
-        File.WriteAllText(path, JsonSerializer.Serialize(token));
-        return Task.FromResult(token);
-    }
-
-    public Task<ApplyResult> RestoreAsync(RestoreToken token, CancellationToken cancellationToken)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        try
-        {
-            if (token.Data.TryGetValue("kind", out var kind) && kind == "registry")
-            {
-                var hive = Enum.Parse<RegistryHiveKind>(token.Data["hive"], true);
-                _registry.SetStringValue(hive, token.Data["subKey"], token.Data["valueName"], token.Data["valueData"]);
-                return Task.FromResult(ApplyResult.Succeeded(token.ActionId, token.Id, 0, "Startup registry entry restored."));
-            }
-
-            if (token.Data.TryGetValue("disabledPath", out var disabled)
-                && token.Data.TryGetValue("originalPath", out var original)
-                && File.Exists(disabled))
-            {
-                File.Move(disabled, original, overwrite: true);
-                return Task.FromResult(ApplyResult.Succeeded(token.ActionId, token.Id, 0, "Startup shortcut restored."));
-            }
-
-            // For folder disables we stored disabledPath only; reconstruct original from allowed root metadata if present.
-            if (token.Data.TryGetValue("disabledPath", out var disabledOnly) && File.Exists(disabledOnly))
-            {
-                var startup = _fileSystem.GetFolderPath(SpecialFolderKind.Startup);
-                var destination = Path.Combine(startup, Path.GetFileName(disabledOnly));
-                File.Move(disabledOnly, destination, overwrite: true);
-                return Task.FromResult(ApplyResult.Succeeded(token.ActionId, token.Id, 0, "Startup shortcut restored."));
-            }
-
-            return Task.FromResult(ApplyResult.Failed(token.ActionId, token.Id, "Restore data incomplete."));
-        }
-        catch (Exception ex)
-        {
-            return Task.FromResult(ApplyResult.Failed(token.ActionId, token.Id, ex.Message));
         }
     }
 }

@@ -11,7 +11,8 @@ Free, open-source Windows cleanup and optimization tool — modular, preview-fir
 - Recycle Bin
 - Startup Manager
 - Disk Analyzer (read-only)
-- Uninstall Cleanup (conservative leftover detection + restore)
+- Uninstall Cleanup (conservative leftover detection; AppData leftovers selectable)
+- Review step before apply, local backups, in-app Restore page
 - Service Advisor (read-only recommendations)
 
 ## Requirements

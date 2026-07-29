@@ -11,13 +11,42 @@
             <ComboBox
                 Width="240"
                 ItemsSource="{x:Bind ViewModel.Themes}"
-                SelectedItem="{x:Bind ViewModel.SelectedTheme, Mode=TwoWay}" />
+                SelectedItem="{x:Bind ViewModel.SelectedTheme, Mode=OneWay}"
+                SelectionChanged="ThemeComboBox_SelectionChanged" />
 
             <TextBlock Text="Language" />
             <ComboBox
                 Width="240"
                 ItemsSource="{x:Bind ViewModel.Languages}"
-                SelectedItem="{x:Bind ViewModel.SelectedLanguage, Mode=TwoWay}" />
+                SelectedItem="{x:Bind ViewModel.SelectedLanguage, Mode=OneWay}"
+                SelectionChanged="LanguageComboBox_SelectionChanged" />
+
+            <TextBlock Text="Backup directory" />
+            <TextBlock
+                Opacity="0.75"
+                TextWrapping="Wrap"
+                Text="Backups created before applying changes are stored here and can be restored from the Restore page." />
+            <Grid ColumnSpacing="8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBox
+                    x:Name="BackupDirectoryBox"
+                    Text="{x:Bind ViewModel.BackupDirectory, Mode=OneWay}"
+                    LostFocus="BackupDirectoryBox_LostFocus" />
+                <Button
+                    Grid.Column="1"
+                    Command="{x:Bind ViewModel.BrowseBackupFolderCommand}"
+                    Content="Browse..." />
+            </Grid>
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <Button
+                    Command="{x:Bind ViewModel.SaveBackupDirectoryCommand}"
+                    Content="Save backup path"
+                    Style="{StaticResource AccentButtonStyle}" />
+                <Button Command="{x:Bind ViewModel.OpenBackupFolderCommand}" Content="Open backup folder" />
+            </StackPanel>
 
             <Button Command="{x:Bind ViewModel.OpenLogFolderCommand}" Content="Open log folder" />
             <TextBlock Text="{x:Bind ViewModel.StatusText, Mode=OneWay}" />
@@ -27,7 +56,7 @@
                 IsClosable="False"
                 Severity="Informational"
                 Title="Privacy"
-                Message="SlopClean stores logs locally only. Paths are redacted. No telemetry is sent." />
+                Message="SlopClean stores logs and backups locally only. Paths are redacted. No telemetry is sent." />
         </StackPanel>
     </ScrollViewer>
 </Page>
