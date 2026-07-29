@@ -122,7 +122,10 @@ public class ModuleRegistrationTests
 
     private sealed class EmptyElevatedSession : IElevatedPrivilegeSession
     {
-        public Task<ApplyResult> ExecuteAsync(OptimizationAction action, CancellationToken cancellationToken)
+        public Task<ApplyResult> ExecuteAsync(
+            OptimizationAction action,
+            CancellationToken cancellationToken,
+            string? displayName = null)
             => Task.FromResult(ApplyResult.Succeeded(action.Id, action.FindingId, 0, "ok"));
 
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;

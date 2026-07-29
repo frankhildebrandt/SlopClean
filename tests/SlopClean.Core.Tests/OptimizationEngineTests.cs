@@ -335,7 +335,10 @@ public class OptimizationEngineTests
 
         private sealed class FakeSession(FakeBroker owner) : IElevatedPrivilegeSession
         {
-            public Task<ApplyResult> ExecuteAsync(OptimizationAction action, CancellationToken cancellationToken)
+            public Task<ApplyResult> ExecuteAsync(
+                OptimizationAction action,
+                CancellationToken cancellationToken,
+                string? displayName = null)
             {
                 owner.ExecuteCount++;
                 return Task.FromResult(ApplyResult.Succeeded(action.Id, action.FindingId, 1, "elevated"));

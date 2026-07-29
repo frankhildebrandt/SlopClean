@@ -214,10 +214,15 @@ public sealed class ElevatedPrivilegeBroker : IPrivilegeBroker
 
     private Process StartHelper(string pipeName, string sessionNonce, bool elevate)
     {
+        // Unelevated/test launches stay headless so CI does not pop a WinUI window.
+        var arguments = elevate
+            ? $"--pipe \"{pipeName}\" --nonce \"{sessionNonce}\""
+            : $"--pipe \"{pipeName}\" --nonce \"{sessionNonce}\" --headless";
+
         var start = new ProcessStartInfo
         {
             FileName = _helperPath,
-            Arguments = $"--pipe \"{pipeName}\" --nonce \"{sessionNonce}\"",
+            Arguments = arguments,
             WorkingDirectory = Path.GetDirectoryName(_helperPath) ?? AppContext.BaseDirectory,
             UseShellExecute = elevate,
             Verb = elevate ? "runas" : string.Empty,
@@ -335,7 +340,10 @@ public sealed class ElevatedPrivilegeBroker : IPrivilegeBroker
             _process = process;
         }
 
-        public async Task<ApplyResult> ExecuteAsync(OptimizationAction action, CancellationToken cancellationToken)
+        public async Task<ApplyResult> ExecuteAsync(
+            OptimizationAction action,
+            CancellationToken cancellationToken,
+            string? displayName = null)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
 
@@ -343,7 +351,10 @@ public sealed class ElevatedPrivilegeBroker : IPrivilegeBroker
             var request = new ElevatedRequest
             {
                 Nonce = nonce,
-                Action = action
+                Action = action,
+                DisplayName = string.IsNullOrWhiteSpace(displayName)
+                    ? action.Path ?? action.FindingId
+                    : displayName
             };
 
             var payload = JsonSerializer.Serialize(request);
@@ -428,6 +439,7 @@ public sealed class ElevatedPrivilegeBroker : IPrivilegeBroker
     {
         public string Nonce { get; set; } = "";
         public OptimizationAction Action { get; set; } = null!;
+        public string? DisplayName { get; set; }
     }
 
     public sealed class ElevatedResponse

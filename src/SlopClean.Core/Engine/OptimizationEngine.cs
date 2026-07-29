@@ -300,7 +300,9 @@ public sealed class OptimizationEngine
                 }
                 else
                 {
-                    result = await session.ExecuteAsync(action, cancellationToken).ConfigureAwait(false);
+                    result = await session
+                        .ExecuteAsync(action, cancellationToken, displayName)
+                        .ConfigureAwait(false);
                 }
             }
             else if (action.OperationCode is PrivilegedOperationCodes.DeleteDriverPackage
@@ -405,7 +407,9 @@ public sealed class OptimizationEngine
             await using var session = await _privilegeBroker
                 .BeginElevatedSessionAsync(cancellationToken)
                 .ConfigureAwait(false);
-            var result = await session.ExecuteAsync(action, cancellationToken).ConfigureAwait(false);
+            var result = await session
+                .ExecuteAsync(action, cancellationToken, displayName: manifest.DisplayName ?? manifest.Id)
+                .ConfigureAwait(false);
             if (result.IsSuccessful)
             {
                 await _restorePointStore.MarkRestoredAsync(manifest.Id, cancellationToken).ConfigureAwait(false);

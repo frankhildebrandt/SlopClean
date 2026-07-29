@@ -16,5 +16,8 @@ public interface IPrivilegeBroker
 
 public interface IElevatedPrivilegeSession : IAsyncDisposable
 {
-    Task<ApplyResult> ExecuteAsync(OptimizationAction action, CancellationToken cancellationToken);
+    Task<ApplyResult> ExecuteAsync(
+        OptimizationAction action,
+        CancellationToken cancellationToken,
+        string? displayName = null);
 }

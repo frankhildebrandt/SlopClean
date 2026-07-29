@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.IO.Pipes;
 using System.Security.AccessControl;
 using System.Security.Principal;
+using SlopClean.Core.Abstractions;
 using SlopClean.Core.Models;
 using SlopClean.Core.Safety;
 using SlopClean.Platform.Windows;
@@ -191,8 +192,10 @@ public class ElevatedHelperContractTests
         var helperPath = FindBuiltHelper();
         Assert.True(helperPath is not null, "Build SlopClean.Elevated before running this test.");
 
-        var connectTimeout = TimeSpan.FromMilliseconds(200);
-        var slowLaunch = TimeSpan.FromMilliseconds(500);
+        // slowLaunch must exceed connectTimeout so an early-armed clock fails the test;
+        // connectTimeout must still allow a headless helper to connect after Start returns.
+        var connectTimeout = TimeSpan.FromMilliseconds(800);
+        var slowLaunch = TimeSpan.FromMilliseconds(1600);
 
         Process? Start(ProcessStartInfo psi)
         {
@@ -205,7 +208,10 @@ public class ElevatedHelperContractTests
             // Block longer than connectTimeout before returning. If the broker armed the
             // connect CTS before Process.Start returned, WaitForConnection is already dead.
             Thread.Sleep(slowLaunch);
-            return Process.Start(CreateUnelevatedStart(helperPath, args));
+            var launchArgs = args.Contains("--headless", StringComparison.Ordinal)
+                ? args
+                : args + " --headless";
+            return Process.Start(CreateUnelevatedStart(helperPath, launchArgs));
         }
 
         var broker = new ElevatedPrivilegeBroker(
@@ -273,13 +279,13 @@ public class ElevatedHelperContractTests
         var candidates = new[]
         {
             Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..",
-                "src", "SlopClean.Elevated", "bin", "x64", "Release", "net10.0-windows10.0.19041.0", "SlopClean.Elevated.exe")),
+                "src", "SlopClean.Elevated", "bin", "x64", "Release", "net10.0-windows10.0.19041.0", "win-x64", "SlopClean.Elevated.exe")),
             Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..",
-                "src", "SlopClean.Elevated", "bin", "x64", "Debug", "net10.0-windows10.0.19041.0", "SlopClean.Elevated.exe")),
+                "src", "SlopClean.Elevated", "bin", "x64", "Debug", "net10.0-windows10.0.19041.0", "win-x64", "SlopClean.Elevated.exe")),
             Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..",
-                "src", "SlopClean.Elevated", "bin", "Release", "net10.0-windows10.0.19041.0", "SlopClean.Elevated.exe")),
+                "src", "SlopClean.Elevated", "bin", "Release", "net10.0-windows10.0.19041.0", "win-x64", "SlopClean.Elevated.exe")),
             Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..",
-                "src", "SlopClean.Elevated", "bin", "Debug", "net10.0-windows10.0.19041.0", "SlopClean.Elevated.exe")),
+                "src", "SlopClean.Elevated", "bin", "Debug", "net10.0-windows10.0.19041.0", "win-x64", "SlopClean.Elevated.exe")),
         };
 
         foreach (var candidate in candidates.Where(File.Exists))

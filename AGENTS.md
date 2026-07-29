@@ -68,9 +68,9 @@ Findings and actions are **immutable**. Actions carry `AllowedRoot`, `OperationC
 | Rule | Detail |
 |------|--------|
 | UI process | Always `asInvoker` |
-| Privileged work | Separate short-lived helper via UAC (`runas`) |
+| Privileged work | Separate short-lived WinUI helper via UAC (`runas`); shows current job while elevated work runs |
 | IPC | Named pipe, same-user ACL, one-time nonce |
-| Helper contract | Fixed operation codes only; re-validates `SafetyPolicy` independently |
+| Helper contract | Fixed operation codes only; re-validates `SafetyPolicy` independently; packaged under `elevated\` (self-contained) |
 
 Never set `requireAdministrator` on the WinUI app.
 

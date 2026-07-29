@@ -58,20 +58,20 @@
   </ItemGroup>
 
   <!--
-    Copy FDD helper into TargetDir\elevated\ early enough for FileWrites / IncrementalClean.
-    Publish path ships a self-contained helper into PublishDir\elevated\ (see PublishElevatedHelper).
+    Copy self-contained WinUI helper into TargetDir\elevated\ (preserve subfolders).
+    Publish path publishes SC helper into PublishDir\elevated\ (see PublishElevatedHelper).
   -->
   <Target Name="ResolveElevatedHelperOutput">
     <MSBuild
       Projects="$(MSBuildThisFileDirectory)..\SlopClean.Elevated\SlopClean.Elevated.csproj"
       Targets="GetTargetPath"
-      Properties="Configuration=$(Configuration);Platform=$(Platform)">
+      Properties="Configuration=$(Configuration);Platform=$(Platform);RuntimeIdentifier=win-x64">
       <Output TaskParameter="TargetOutputs" ItemName="_ElevatedTargetPathItem" />
     </MSBuild>
     <PropertyGroup>
       <_ElevatedOut Condition="'@(_ElevatedTargetPathItem)' != ''">$([System.IO.Path]::GetDirectoryName('@(_ElevatedTargetPathItem)'))\</_ElevatedOut>
-      <_ElevatedOut Condition="'$(_ElevatedOut)' == '' or !Exists('$(_ElevatedOut)SlopClean.Elevated.exe')">$(MSBuildThisFileDirectory)..\SlopClean.Elevated\bin\$(Platform)\$(Configuration)\net10.0-windows10.0.19041.0\</_ElevatedOut>
-      <_ElevatedOut Condition="!Exists('$(_ElevatedOut)SlopClean.Elevated.exe')">$(MSBuildThisFileDirectory)..\SlopClean.Elevated\bin\$(Configuration)\net10.0-windows10.0.19041.0\</_ElevatedOut>
+      <_ElevatedOut Condition="'$(_ElevatedOut)' == '' or !Exists('$(_ElevatedOut)SlopClean.Elevated.exe')">$(MSBuildThisFileDirectory)..\SlopClean.Elevated\bin\$(Platform)\$(Configuration)\net10.0-windows10.0.19041.0\win-x64\</_ElevatedOut>
+      <_ElevatedOut Condition="!Exists('$(_ElevatedOut)SlopClean.Elevated.exe')">$(MSBuildThisFileDirectory)..\SlopClean.Elevated\bin\$(Configuration)\net10.0-windows10.0.19041.0\win-x64\</_ElevatedOut>
     </PropertyGroup>
   </Target>
 
@@ -83,7 +83,7 @@
       <_ElevatedDest>$(TargetDir)elevated\</_ElevatedDest>
     </PropertyGroup>
     <ItemGroup>
-      <_ElevatedSourceFiles Include="$(_ElevatedOut)*.*" Condition="Exists('$(_ElevatedOut)SlopClean.Elevated.exe')" />
+      <_ElevatedSourceFiles Include="$(_ElevatedOut)**\*.*" Condition="Exists('$(_ElevatedOut)SlopClean.Elevated.exe')" />
     </ItemGroup>
     <Error
       Condition="!Exists('$(_ElevatedOut)SlopClean.Elevated.exe')"
@@ -91,13 +91,13 @@
     <MakeDir Directories="$(_ElevatedDest)" />
     <Copy
       SourceFiles="@(_ElevatedSourceFiles)"
-      DestinationFolder="$(_ElevatedDest)"
+      DestinationFiles="@(_ElevatedSourceFiles->'$(_ElevatedDest)%(RecursiveDir)%(Filename)%(Extension)')"
       SkipUnchangedFiles="false" />
     <Error
       Condition="!Exists('$(_ElevatedDest)SlopClean.Elevated.dll') or !Exists('$(_ElevatedDest)SlopClean.Elevated.exe')"
       Text="Elevated helper incomplete under '$(_ElevatedDest)' (expected SlopClean.Elevated.exe and .dll)." />
     <ItemGroup>
-      <FileWrites Include="@(_ElevatedSourceFiles->'$(_ElevatedDest)%(Filename)%(Extension)')" />
+      <FileWrites Include="@(_ElevatedSourceFiles->'$(_ElevatedDest)%(RecursiveDir)%(Filename)%(Extension)')" />
     </ItemGroup>
   </Target>
 

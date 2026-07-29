@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Window
+    x:Class="SlopClean.Elevated.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Title="SlopClean (Administrator)">
+    <Window.SystemBackdrop>
+        <MicaBackdrop />
+    </Window.SystemBackdrop>
+
+    <Grid Padding="20" RowSpacing="12">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <StackPanel Orientation="Horizontal" Spacing="10">
+            <FontIcon Glyph="&#xE7EF;" FontSize="20" />
+            <TextBlock
+                x:Name="HeadingText"
+                Style="{StaticResource SubtitleTextBlockStyle}"
+                VerticalAlignment="Center" />
+        </StackPanel>
+
+        <StackPanel Grid.Row="1" Spacing="4">
+            <TextBlock x:Name="StatusLabelText" Opacity="0.7" Style="{StaticResource CaptionTextBlockStyle}" />
+            <TextBlock x:Name="StatusText" Style="{StaticResource BodyTextBlockStyle}" TextWrapping="WrapWholeWords" />
+        </StackPanel>
+
+        <StackPanel Grid.Row="2" Spacing="4">
+            <TextBlock x:Name="JobLabelText" Opacity="0.7" Style="{StaticResource CaptionTextBlockStyle}" />
+            <TextBlock
+                x:Name="JobText"
+                Style="{StaticResource BodyStrongTextBlockStyle}"
+                TextWrapping="WrapWholeWords"
+                IsTextSelectionEnabled="True" />
+        </StackPanel>
+
+        <ProgressBar
+            x:Name="BusyBar"
+            Grid.Row="3"
+            VerticalAlignment="Bottom"
+            IsIndeterminate="True" />
+    </Grid>
+</Window>
