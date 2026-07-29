@@ -48,7 +48,7 @@ The app is unpackaged and self-contained (`WindowsPackageType=None`, `WindowsApp
 - `SlopClean.Core` — module contracts, engine, safety policy
 - `SlopClean.Platform.Windows` — filesystem, registry, services, elevated broker
 - `SlopClean.Elevated` — short-lived UAC helper for privileged operations
-- `SlopClean.Modules` — built-in optimization modules
+- `SlopClean.Modules` — DI aggregator for built-in modules (`SlopClean.Modules.*`)
 - `SlopClean.App` — WinUI 3 shell (control-first UI)
 
 ## Safety

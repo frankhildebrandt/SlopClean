@@ -1,6 +1,6 @@
 using Microsoft.Windows.ApplicationModel.Resources;
 using SlopClean.Core.Modules;
-using SlopClean.Modules;
+using SlopClean.Modules.CoreIsolationDrivers;
 
 namespace SlopClean.App.Helpers;
 

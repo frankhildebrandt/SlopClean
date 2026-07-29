@@ -5,7 +5,14 @@ using SlopClean.Core.Modules;
 using SlopClean.Core.Planning;
 using SlopClean.Core.Safety;
 using SlopClean.Core.Settings;
-using SlopClean.Modules;
+using SlopClean.Modules.BrowserCleaner;
+using SlopClean.Modules.CoreIsolationDrivers;
+using SlopClean.Modules.DiskAnalyzer;
+using SlopClean.Modules.RecycleBin;
+using SlopClean.Modules.ServiceAdvisor;
+using SlopClean.Modules.StartupManager;
+using SlopClean.Modules.TempCleaner;
+using SlopClean.Modules.UninstallCleanup;
 
 namespace Microsoft.Extensions.DependencyInjection;
 

@@ -2,10 +2,9 @@
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <IsPackable>false</IsPackable>
-    <RootNamespace>SlopClean.Modules.Tests</RootNamespace>
+    <RootNamespace>SlopClean.Modules.RecycleBin.Tests</RootNamespace>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.0" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
     <PackageReference Include="xunit" Version="2.9.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4">
@@ -14,7 +13,7 @@
     </PackageReference>
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\src\SlopClean.Modules\SlopClean.Modules.csproj" />
+    <ProjectReference Include="..\..\src\SlopClean.Modules.RecycleBin\SlopClean.Modules.RecycleBin.csproj" />
     <ProjectReference Include="..\SlopClean.Modules.TestSupport\SlopClean.Modules.TestSupport.csproj" />
   </ItemGroup>
 </Project>

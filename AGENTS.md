@@ -29,10 +29,13 @@ src/
   SlopClean.Core/                # UI-/Windows-free contracts, engine, safety
   SlopClean.Platform.Windows/    # OS implementations (FS, registry, processes, services, broker)
   SlopClean.Elevated/            # Short-lived UAC helper for privileged ops only
-  SlopClean.Modules/             # Built-in optimization modules
+  SlopClean.Modules/             # DI aggregator for built-in modules
+  SlopClean.Modules.*/           # One assembly per built-in module
 tests/
   SlopClean.Core.Tests/
-  SlopClean.Modules.Tests/       # Modules against fakes only
+  SlopClean.Modules.TestSupport/ # Shared fakes for module tests
+  SlopClean.Modules.Tests/       # Aggregator DI registration tests
+  SlopClean.Modules.*.Tests/     # One test project per module (fakes only)
   SlopClean.Platform.Windows.Tests/
 ```
 
@@ -133,7 +136,7 @@ TDD applies to **new behavior and bug fixes**. Bug fixes must land with a failin
 | Layer | Project | Style |
 |-------|---------|--------|
 | Contracts, Safety, Engine | `SlopClean.Core.Tests` | Pure unit tests + fakes |
-| Modules | `SlopClean.Modules.Tests` | Fakes only — never touch real user files, autostart, services, or production registry |
+| Modules | `SlopClean.Modules.*.Tests` (+ `Modules.Tests` for DI registration) | Fakes only — never touch real user files, autostart, services, or production registry |
 | Windows I/O / broker contracts | `SlopClean.Platform.Windows.Tests` | Temp directories / dedicated test keys; negative tests for elevated helper contracts |
 
 ### Hard TDD rules

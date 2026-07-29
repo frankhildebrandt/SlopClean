@@ -1,12 +1,19 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <RootNamespace>SlopClean.Modules</RootNamespace>
-    <Description>Built-in optimization modules for SlopClean.</Description>
+    <Description>Built-in optimization modules composition for SlopClean.</Description>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\SlopClean.Core\SlopClean.Core.csproj" />
+    <ProjectReference Include="..\SlopClean.Modules.TempCleaner\SlopClean.Modules.TempCleaner.csproj" />
+    <ProjectReference Include="..\SlopClean.Modules.RecycleBin\SlopClean.Modules.RecycleBin.csproj" />
+    <ProjectReference Include="..\SlopClean.Modules.BrowserCleaner\SlopClean.Modules.BrowserCleaner.csproj" />
+    <ProjectReference Include="..\SlopClean.Modules.StartupManager\SlopClean.Modules.StartupManager.csproj" />
+    <ProjectReference Include="..\SlopClean.Modules.DiskAnalyzer\SlopClean.Modules.DiskAnalyzer.csproj" />
+    <ProjectReference Include="..\SlopClean.Modules.UninstallCleanup\SlopClean.Modules.UninstallCleanup.csproj" />
+    <ProjectReference Include="..\SlopClean.Modules.ServiceAdvisor\SlopClean.Modules.ServiceAdvisor.csproj" />
+    <ProjectReference Include="..\SlopClean.Modules.CoreIsolationDrivers\SlopClean.Modules.CoreIsolationDrivers.csproj" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.0" />
-    <EmbeddedResource Include="Data\service-advisor.json" />
   </ItemGroup>
 </Project>
