@@ -20,6 +20,9 @@ public static partial class InfOemParser
     [GeneratedRegex(@"^\s*(?<k>[^;=]+)\s*=\s*(?<v>.+?)\s*$", RegexOptions.CultureInvariant)]
     private static partial Regex StringKvRegex();
 
+    [GeneratedRegex(@"\b(?<file>[A-Za-z0-9][A-Za-z0-9._-]*\.sys)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex SysFileRegex();
+
     public static bool TryRead(string infPath, out ParsedOemInf parsed)
     {
         parsed = default!;
@@ -32,6 +35,7 @@ public static partial class InfOemParser
             string? driverVerRaw = null;
             var inStrings = false;
             var strings = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var images = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
             foreach (var raw in lines)
             {
@@ -56,6 +60,11 @@ public static partial class InfOemParser
                     }
 
                     continue;
+                }
+
+                foreach (Match sys in SysFileRegex().Matches(line))
+                {
+                    images.Add(sys.Groups["file"].Value);
                 }
 
                 var pm = ProviderRegex().Match(line);
@@ -115,7 +124,8 @@ public static partial class InfOemParser
                 DriverVersion: driverVersion,
                 DriverDate: driverDate,
                 InfLastWriteUtc: lastWrite,
-                ApproximateSizeBytes: length);
+                ApproximateSizeBytes: length,
+                ReferencedImageFileNames: images.OrderBy(static n => n, StringComparer.OrdinalIgnoreCase).ToArray());
             return classGuid != Guid.Empty;
         }
         catch
@@ -175,5 +185,6 @@ public static partial class InfOemParser
         string? DriverVersion,
         DateOnly? DriverDate,
         DateTimeOffset? InfLastWriteUtc,
-        long ApproximateSizeBytes);
+        long ApproximateSizeBytes,
+        IReadOnlyList<string> ReferencedImageFileNames);
 }

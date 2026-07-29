@@ -35,13 +35,16 @@ internal static class CoreIsolationDriverFindingBuilder
             AllowedRoot: null);
     }
 
-    public static ScanFinding BuildOrphanFinding(OemDriverPackage package, bool includeDebug)
+    public static ScanFinding BuildOrphanFinding(OemDriverPackage package, bool includeDebug, bool allowInUse)
     {
         var details = new StringBuilder();
-        details.Append("What: OEM package ").Append(package.PublishedName)
-            .Append(" (").Append(package.Provider).Append("). ");
-        details.Append("Why: No associated devices (connected or disconnected/phantom). Safe orphan candidate for driver-store cleanup that can help Memory Integrity readiness.");
-        CoreIsolationDriverIdentityFormatter.AppendDriverIdentity(details, package);
+        CoreIsolationDriverIdentityFormatter.AppendHumanReadableSummary(details, package, imageFileName: null);
+        details.Append(" Why: Optional orphan OEM package with no associated devices.");
+        if (allowInUse)
+        {
+            details.Append(" Opt-in in-use removal is enabled: delete will uninstall if devices still reference it.");
+        }
+
         if (includeDebug)
         {
             AppendDebug(details, package, null);
@@ -51,7 +54,7 @@ internal static class CoreIsolationDriverFindingBuilder
             Id: $"{ModuleId}:orphan:{package.PublishedName}",
             ModuleId: ModuleId,
             TargetId: package.PublishedName,
-            DisplayName: CoreIsolationDriverIdentityFormatter.FormatPackageDisplayName("Orphan driver", package),
+            DisplayName: CoreIsolationDriverIdentityFormatter.FormatBlockerDisplayName(package, imageFileName: null),
             Path: package.PublishedName,
             SizeBytes: package.ApproximateSizeBytes,
             Risk: FindingRisk.Medium,
@@ -59,7 +62,7 @@ internal static class CoreIsolationDriverFindingBuilder
             IsActionable: true,
             RequiredPrivilege: RequiredPrivilege.Elevated,
             AllowedRoot: null,
-            Metadata: BuildActionMetadata(package, orphan: true, allowInUse: false));
+            Metadata: BuildActionMetadata(package, orphan: true, allowInUse: allowInUse));
     }
 
     public static ScanFinding BuildBlockerFinding(
@@ -69,41 +72,34 @@ internal static class CoreIsolationDriverFindingBuilder
         bool includeDebug)
     {
         var details = new StringBuilder();
-        details.Append("What: Package ").Append(package.PublishedName)
-            .Append(" linked to observed CI image ").Append(signal.ImageFileName).Append(". ");
-        details.Append("Why: Appears in Code Integrity Operational events (observed signal, not a complete HVCI incompatibility scan). ");
-        if (package.TotalDeviceCount > 0)
+        CoreIsolationDriverIdentityFormatter.AppendHumanReadableSummary(details, package, signal.ImageFileName);
+        details.Append(" Why: Code Integrity reports this driver as incompatible with Memory Integrity (observed signal, not a full HVCI scan).");
+
+        var bound = package.TotalDeviceCount > 0;
+        if (bound && allowInUse)
         {
-            details.Append("Bound to ")
-                .Append(package.ConnectedDeviceCount).Append(" present and ")
-                .Append(package.DisconnectedDeviceCount).Append(" disconnected device(s). ");
+            details.Append(" WARNING: Opt-in removal enabled. Restore is best-effort and may not rebind devices. Reboot may be required.");
+        }
+        else if (bound)
+        {
+            details.Append(" Not removable unless you enable 'Allow remove in-use blockers'.");
         }
 
-        if (allowInUse)
-        {
-            details.Append("WARNING: Opt-in removal enabled. Restore is best-effort and may not rebind devices. Reboot may be required.");
-        }
-        else
-        {
-            details.Append("Not removable unless you enable 'Allow remove in-use blockers'.");
-        }
-
-        CoreIsolationDriverIdentityFormatter.AppendDriverIdentity(details, package);
         if (includeDebug)
         {
             AppendDebug(details, package, signal);
         }
 
-        var actionable = allowInUse
-                         && !CriticalDriverClassGuids.IsDenied(package.ClassGuid)
-                         && !package.IsBootCritical
-                         && !package.Provider.Contains("Microsoft", StringComparison.OrdinalIgnoreCase);
+        var protectedPackage = CriticalDriverClassGuids.IsDenied(package.ClassGuid)
+                               || package.IsBootCritical
+                               || package.Provider.Contains("Microsoft", StringComparison.OrdinalIgnoreCase);
+        var actionable = !protectedPackage && (!bound || allowInUse);
 
         return new ScanFinding(
             Id: $"{ModuleId}:blocker:{package.PublishedName}",
             ModuleId: ModuleId,
             TargetId: package.PublishedName,
-            DisplayName: CoreIsolationDriverIdentityFormatter.FormatPackageDisplayName("Observed CI blocker", package),
+            DisplayName: CoreIsolationDriverIdentityFormatter.FormatBlockerDisplayName(package, signal.ImageFileName),
             Path: package.PublishedName,
             SizeBytes: package.ApproximateSizeBytes,
             Risk: FindingRisk.High,
@@ -111,7 +107,9 @@ internal static class CoreIsolationDriverFindingBuilder
             IsActionable: actionable,
             RequiredPrivilege: RequiredPrivilege.Elevated,
             AllowedRoot: null,
-            Metadata: actionable ? BuildActionMetadata(package, orphan: false, allowInUse: true) : null);
+            Metadata: actionable
+                ? BuildActionMetadata(package, orphan: !bound, allowInUse: bound && allowInUse)
+                : null);
     }
 
     public static ScanFinding Degraded(string targetId, string details)
@@ -131,7 +129,7 @@ internal static class CoreIsolationDriverFindingBuilder
     public static string BuildUnmatchedDetails(CodeIntegritySignal signal, int ownerCount, bool includeDebug)
     {
         var details =
-            $"What: Observed CI event for '{signal.ImageFileName}'. Why: Could not map uniquely to one OEM package (owners={ownerCount}). Informational only.";
+            $"Driver file: {signal.ImageFileName ?? "unknown"}. Why: Could not map uniquely to one OEM package (owners={ownerCount}). Informational only.";
         if (includeDebug)
         {
             details += $" [debug] eventId={signal.EventId}; utc={signal.TimestampUtc:u}";
@@ -156,7 +154,7 @@ internal static class CoreIsolationDriverFindingBuilder
             [DriverPackagePayloadKeys.IsBootCritical] = package.IsBootCritical ? "true" : "false",
             [DriverPackagePayloadKeys.IsMicrosoftProvider] =
                 package.Provider.Contains("Microsoft", StringComparison.OrdinalIgnoreCase) ? "true" : "false",
-            [DriverPackagePayloadKeys.BestEffortRestore] = orphan ? "false" : "true"
+            [DriverPackagePayloadKeys.BestEffortRestore] = orphan && !allowInUse ? "false" : "true"
         };
 
     private static void AppendDebug(StringBuilder details, OemDriverPackage package, CodeIntegritySignal? signal)

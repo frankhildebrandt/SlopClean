@@ -76,8 +76,9 @@ public static class DriverPackageElevatedOperations
             packageDir);
         DriverPackageIdentity.Write(packageDir, identity);
 
-        var uninstall = allowInUse
-                        && removalMode.Equals(DriverPackagePayloadKeys.RemovalModeInUse, StringComparison.OrdinalIgnoreCase);
+        // pnputil rejects deletes while any device still references the INF. Opt-in AllowInUse
+        // adds /uninstall for orphan and in-use removals alike (still no /force).
+        var uninstall = allowInUse;
         var delete = driverStore.DeletePackage(published, uninstallFromDevices: uninstall);
         if (!delete.Succeeded)
         {

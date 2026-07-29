@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
+using Microsoft.Win32;
 using SlopClean.Core.Abstractions;
 using SlopClean.Core.Models;
 using SlopClean.Core.Safety;
@@ -50,7 +51,12 @@ public sealed partial class WindowsDriverStore : IDriverStore
                 return DriverStoreEnumerationResult.Failed("Windows INF directory is not available.");
             }
 
-            var associations = BuildInfDeviceAssociations();
+            var publishedToOriginal = TryReadPublishedToOriginalNames();
+            var originalToPublished = publishedToOriginal
+                .GroupBy(kv => kv.Value, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(g => g.Key, g => g.First().Key, StringComparer.OrdinalIgnoreCase);
+
+            var associations = BuildInfDeviceAssociations(originalToPublished);
             if (associations is null)
             {
                 return DriverStoreEnumerationResult.Failed("SetupAPI device enumeration failed.");
@@ -88,10 +94,13 @@ public sealed partial class WindowsDriverStore : IDriverStore
                 var bootCritical = BootCriticalClasses.Contains(parsed.ClassGuid);
                 var className = parsed.ClassName
                     ?? devices.Select(d => d.ClassName).FirstOrDefault(static c => !string.IsNullOrWhiteSpace(c));
+                var originalName = publishedToOriginal.TryGetValue(name, out var fromPnP)
+                    ? fromPnP
+                    : parsed.OriginalName;
 
                 packages.Add(new OemDriverPackage(
                     PublishedName: parsed.PublishedName,
-                    OriginalName: parsed.OriginalName,
+                    OriginalName: originalName,
                     Provider: parsed.Provider,
                     ClassGuid: parsed.ClassGuid,
                     PackageFingerprint: parsed.PackageFingerprint,
@@ -104,7 +113,8 @@ public sealed partial class WindowsDriverStore : IDriverStore
                     DriverVersion: parsed.DriverVersion,
                     DriverDate: parsed.DriverDate,
                     InfLastWriteUtc: parsed.InfLastWriteUtc,
-                    AssociatedDevices: associated));
+                    AssociatedDevices: associated,
+                    ReferencedImageFileNames: parsed.ReferencedImageFileNames));
             }
 
             return DriverStoreEnumerationResult.Succeeded(packages);
@@ -164,7 +174,26 @@ public sealed partial class WindowsDriverStore : IDriverStore
         return PnPUtilRunner.Run(["/add-driver", infPath]);
     }
 
-    private static Dictionary<string, List<DeviceAssoc>>? BuildInfDeviceAssociations()
+    private static IReadOnlyDictionary<string, string> TryReadPublishedToOriginalNames()
+    {
+        try
+        {
+            var result = PnPUtilRunner.Run(["/enum-drivers"], TimeSpan.FromSeconds(45));
+            if (!result.Succeeded || string.IsNullOrWhiteSpace(result.Message))
+            {
+                return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            }
+
+            return PnPUtilEnumDriversParser.ParsePublishedToOriginal(result.Message);
+        }
+        catch
+        {
+            return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        }
+    }
+
+    private static Dictionary<string, List<DeviceAssoc>>? BuildInfDeviceAssociations(
+        IReadOnlyDictionary<string, string> originalToPublished)
     {
         var presentIds = CollectPresentInstanceIds();
         if (presentIds is null)
@@ -185,14 +214,14 @@ public sealed partial class WindowsDriverStore : IDriverStore
             for (uint i = 0; SetupDiEnumDeviceInfo(set, i, ref data); i++)
             {
                 var instanceId = GetDevicePropertyString(set, ref data, DeviceInstanceId) ?? $"DEVINST-{data.DevInst}";
-                var infPath = GetDevicePropertyString(set, ref data, DeviceDriverInfPath);
-                if (string.IsNullOrWhiteSpace(infPath))
-                {
-                    continue;
-                }
-
-                var published = Path.GetFileName(infPath);
-                if (!OemInfNameRegex().IsMatch(published))
+                var deviceInfPath = GetDevicePropertyString(set, ref data, DeviceDriverInfPath);
+                var driverNodeInfPath = ReadDriverNodeInfPath(
+                    GetDeviceRegistryPropertyString(set, ref data, SpdrpDriver));
+                var published = DriverPackageNameResolver.ResolvePublishedOemName(
+                    driverNodeInfPath,
+                    deviceInfPath,
+                    originalToPublished);
+                if (published is null)
                 {
                     continue;
                 }
@@ -228,6 +257,25 @@ public sealed partial class WindowsDriverStore : IDriverStore
         finally
         {
             SetupDiDestroyDeviceInfoList(set);
+        }
+    }
+
+    private static string? ReadDriverNodeInfPath(string? driverNodeRelativePath)
+    {
+        if (string.IsNullOrWhiteSpace(driverNodeRelativePath))
+        {
+            return null;
+        }
+
+        try
+        {
+            using var key = Registry.LocalMachine.OpenSubKey(
+                @"SYSTEM\CurrentControlSet\Control\Class\" + driverNodeRelativePath.TrimStart('\\'));
+            return key?.GetValue("InfPath") as string;
+        }
+        catch
+        {
+            return null;
         }
     }
 

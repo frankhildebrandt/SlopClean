@@ -15,7 +15,8 @@ public sealed record OemDriverPackage(
     string? DriverVersion = null,
     DateOnly? DriverDate = null,
     DateTimeOffset? InfLastWriteUtc = null,
-    IReadOnlyList<OemDriverAssociatedDevice>? AssociatedDevices = null)
+    IReadOnlyList<OemDriverAssociatedDevice>? AssociatedDevices = null,
+    IReadOnlyList<string>? ReferencedImageFileNames = null)
 {
     public int TotalDeviceCount => ConnectedDeviceCount + DisconnectedDeviceCount;
 
@@ -25,4 +26,7 @@ public sealed record OemDriverPackage(
 
     public IReadOnlyList<OemDriverAssociatedDevice> Devices
         => AssociatedDevices ?? [];
+
+    public IReadOnlyList<string> ImageFileNames
+        => ReferencedImageFileNames ?? [];
 }

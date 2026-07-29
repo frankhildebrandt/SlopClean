@@ -10,20 +10,27 @@ public class CoreIsolationDriversModuleTests
     private static readonly Guid MediaClass = new("4d36e96c-e325-11ce-bfc1-08002be10318");
 
     [Fact]
-    public async Task Orphan_packages_are_actionable_when_enumeration_authoritative()
+    public async Task Default_scan_ignores_orphans_without_ci_signal()
     {
-        var module = CreateModule(
-            packages:
-            [
-                Orphan("oem10.inf", "contoso.inf", "Contoso")
-            ]);
+        var module = CreateModule(packages: [Orphan("oem10.inf", "contoso.inf", "Contoso")]);
 
         var findings = await ScanAsync(module);
+
+        Assert.DoesNotContain(findings, f => f.Id.Contains("orphan", StringComparison.Ordinal));
+        Assert.DoesNotContain(findings, f => f.IsActionable);
+    }
+
+    [Fact]
+    public async Task Orphan_packages_are_actionable_only_when_include_orphans_enabled()
+    {
+        var module = CreateModule(packages: [Orphan("oem10.inf", "contoso.inf", "Contoso")]);
+
+        var findings = await ScanAsync(module, includeOrphans: true);
 
         var orphan = Assert.Single(findings, f => f.Id.Contains("orphan", StringComparison.Ordinal));
         Assert.True(orphan.IsActionable);
         Assert.Equal(RequiredPrivilege.Elevated, orphan.RequiredPrivilege);
-        Assert.Contains("Why:", orphan.Details, StringComparison.Ordinal);
+        Assert.Contains("Hardware:", orphan.Details, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(
             PrivilegedOperationCodes.DeleteDriverPackage,
             orphan.Metadata![OptimizationAction.OperationCodeMetadataKey]);
@@ -97,6 +104,97 @@ public class CoreIsolationDriversModuleTests
 
         var findings = await ScanAsync(module);
         Assert.DoesNotContain(findings, f => f.IsActionable);
+    }
+
+    [Fact]
+    public async Task Orphan_action_respects_allow_in_use_parameter()
+    {
+        var module = CreateModule(packages: [Orphan("oem36.inf", "contoso.inf", "Contoso")]);
+
+        var without = await ScanAsync(module, allowInUse: false, includeOrphans: true);
+        var orphanWithout = Assert.Single(without, f => f.Id.Contains("orphan", StringComparison.Ordinal));
+        Assert.Equal("false", orphanWithout.Metadata![DriverPackagePayloadKeys.AllowInUse]);
+
+        var with = await ScanAsync(module, allowInUse: true, includeOrphans: true);
+        var orphanWith = Assert.Single(with, f => f.Id.Contains("orphan", StringComparison.Ordinal));
+        Assert.Equal("true", orphanWith.Metadata![DriverPackagePayloadKeys.AllowInUse]);
+        Assert.Equal("true", orphanWith.Metadata[DriverPackagePayloadKeys.BestEffortRestore]);
+    }
+
+    [Fact]
+    public async Task Bound_package_without_ci_signal_is_never_actionable()
+    {
+        var bound = new OemDriverPackage(
+            "oem36.inf",
+            "contoso.inf",
+            "Contoso",
+            MediaClass,
+            "fp-36",
+            ["USB\\VID_1234&PID_5678\\1"],
+            ConnectedDeviceCount: 1,
+            DisconnectedDeviceCount: 0,
+            IsBootCritical: false,
+            AssociatedDevices:
+            [
+                new OemDriverAssociatedDevice(
+                    "USB\\VID_1234&PID_5678\\1",
+                    "Contoso USB Sound Adapter",
+                    "USB Audio Device",
+                    IsPresent: true)
+            ]);
+
+        var module = CreateModule([bound]);
+
+        var without = await ScanAsync(module, allowInUse: false);
+        Assert.DoesNotContain(without, f => f.IsActionable);
+
+        var with = await ScanAsync(module, allowInUse: true);
+        Assert.DoesNotContain(with, f => f.IsActionable);
+        Assert.DoesNotContain(with, f => f.Id.Contains("bound", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Blocker_display_name_leads_with_hardware_or_driver_file()
+    {
+        var package = new OemDriverPackage(
+            "oem55.inf",
+            "lgjoyhid.inf",
+            "Logitech",
+            MediaClass,
+            "fp-55",
+            ["USB\\VID_046D&PID_C21F\\1"],
+            ConnectedDeviceCount: 0,
+            DisconnectedDeviceCount: 1,
+            IsBootCritical: false,
+            ClassName: "HIDClass",
+            DriverVersion: "8.85.75.0",
+            DriverDate: new DateOnly(2016, 6, 13),
+            AssociatedDevices:
+            [
+                new OemDriverAssociatedDevice(
+                    "USB\\VID_046D&PID_C21F\\1",
+                    "Logitech Gaming Software",
+                    "Logitech HID device",
+                    IsPresent: false)
+            ],
+            ReferencedImageFileNames: ["LGJoyXICore.sys"]);
+
+        var signal = new CodeIntegritySignal(
+            3089,
+            DateTimeOffset.UtcNow,
+            "LGJoyXICore.sys",
+            null,
+            @"C:\Windows\System32\drivers\LGJoyXICore.sys blocked");
+
+        var module = CreateModule([package], [signal]);
+        var findings = await ScanAsync(module, allowInUse: true, includeDebug: false);
+        var blocker = Assert.Single(findings, f => f.Id.Contains("blocker", StringComparison.Ordinal));
+
+        Assert.StartsWith("Logitech Gaming Software", blocker.DisplayName, StringComparison.Ordinal);
+        Assert.Contains("LGJoyXICore.sys", blocker.DisplayName, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Hardware:", blocker.Details, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Logitech Gaming Software", blocker.Details, StringComparison.Ordinal);
+        Assert.False(blocker.Details.StartsWith("What:", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
@@ -210,12 +308,14 @@ public class CoreIsolationDriversModuleTests
     private static async Task<List<ScanFinding>> ScanAsync(
         CoreIsolationDriversModule module,
         bool allowInUse = false,
-        bool includeDebug = true)
+        bool includeDebug = true,
+        bool includeOrphans = false)
     {
         var parameters = new Dictionary<string, object?>
         {
             ["IncludeDebugDetails"] = includeDebug,
-            ["AllowRemoveInUseBlockers"] = allowInUse
+            ["AllowRemoveInUseBlockers"] = allowInUse,
+            ["IncludeOrphanOemPackages"] = includeOrphans
         };
         var findings = new List<ScanFinding>();
         await foreach (var finding in module.ScanAsync(parameters, null, CancellationToken.None))

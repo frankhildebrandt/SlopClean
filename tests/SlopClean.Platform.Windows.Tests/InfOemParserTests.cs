@@ -19,6 +19,9 @@ public class InfOemParserTests
             Provider=%Provider%
             DriverVer=01/01/2024,1.0.0.0
 
+            [SourceDisksFiles]
+            contoso.sys=1
+
             [Strings]
             Provider="Contoso Audio"
             """);
@@ -33,6 +36,7 @@ public class InfOemParserTests
             Assert.Equal("1.0.0.0", parsed.DriverVersion);
             Assert.Equal(new DateOnly(2024, 1, 1), parsed.DriverDate);
             Assert.Contains("oem99.inf", parsed.PackageFingerprint, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("contoso.sys", parsed.ReferencedImageFileNames, StringComparer.OrdinalIgnoreCase);
         }
         finally
         {

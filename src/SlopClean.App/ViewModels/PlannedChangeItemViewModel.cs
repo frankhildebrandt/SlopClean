@@ -13,7 +13,9 @@ public sealed class PlannedChangeItemViewModel
     public PlannedChange Change { get; }
 
     public string Title => Change.DisplayName;
-    public string Details => Change.Path ?? Change.Details ?? "";
+    public string Details => !string.IsNullOrWhiteSpace(Change.Details)
+        ? Change.Details!
+        : Change.Path ?? "";
     public string SizeText => ByteSizeFormatter.Format(Change.SizeBytes);
     public string RiskText => Change.Risk.ToString();
     public string PrivilegeText => Change.RequiredPrivilege == RequiredPrivilege.Elevated ? "Admin" : "User";

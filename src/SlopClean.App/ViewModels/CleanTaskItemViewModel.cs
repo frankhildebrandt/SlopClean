@@ -11,7 +11,9 @@ public partial class CleanTaskItemViewModel : ObservableObject
         ActionId = change.Action.Id;
         FindingId = change.Id;
         Title = change.DisplayName;
-        Details = change.Path ?? change.Details ?? "";
+        Details = !string.IsNullOrWhiteSpace(change.Details)
+            ? change.Details!
+            : change.Path ?? "";
         SizeText = ByteSizeFormatter.Format(change.SizeBytes);
         ModuleId = change.Action.ModuleId;
         State = ApplyItemState.Pending;

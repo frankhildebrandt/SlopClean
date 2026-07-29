@@ -5,27 +5,46 @@ namespace SlopClean.Modules.CoreIsolationDrivers;
 
 internal static class CoreIsolationDriverIdentityFormatter
 {
-    public static void AppendDriverIdentity(StringBuilder details, OemDriverPackage package)
+    public static void AppendHumanReadableSummary(
+        StringBuilder details,
+        OemDriverPackage package,
+        string? imageFileName)
     {
-        details.Append(" Hardware: ").Append(FormatHardware(package)).Append('.');
-        details.Append(" In use: ").Append(FormatInUse(package)).Append('.');
+        details.Append("Hardware: ").Append(FormatHardware(package)).Append('.');
+        details.Append(" Driver file: ").Append(FormatDriverFile(package, imageFileName)).Append('.');
+        details.Append(" Provider: ").Append(package.Provider).Append('.');
         details.Append(" Version: ").Append(FormatVersion(package)).Append('.');
         details.Append(" Age: ").Append(FormatAge(package, DateTimeOffset.UtcNow)).Append('.');
+        details.Append(" In use: ").Append(FormatInUse(package)).Append('.');
     }
 
-    public static string FormatPackageDisplayName(string prefix, OemDriverPackage package)
+    public static void AppendDriverIdentity(StringBuilder details, OemDriverPackage package)
+        => AppendHumanReadableSummary(details, package, imageFileName: null);
+
+    public static string FormatBlockerDisplayName(OemDriverPackage package, string? imageFileName)
     {
         var hardware = package.Devices
             .Select(static d => d.DisplayName)
             .FirstOrDefault(static n => !string.IsNullOrWhiteSpace(n));
-        if (!string.IsNullOrWhiteSpace(hardware) &&
-            !hardware.Equals(package.OriginalName, StringComparison.OrdinalIgnoreCase))
+        var driverFile = FirstImage(package, imageFileName);
+
+        if (!string.IsNullOrWhiteSpace(hardware))
         {
-            return $"{prefix}: {package.OriginalName} — {hardware}";
+            return string.IsNullOrWhiteSpace(driverFile)
+                ? hardware
+                : $"{hardware} — {driverFile}";
         }
 
-        return $"{prefix}: {package.OriginalName}";
+        if (!string.IsNullOrWhiteSpace(driverFile))
+        {
+            return $"{package.Provider} — {driverFile}";
+        }
+
+        return $"{package.Provider} — {package.OriginalName}";
     }
+
+    public static string FormatPackageDisplayName(string prefix, OemDriverPackage package)
+        => $"{prefix}: {FormatBlockerDisplayName(package, imageFileName: null)}";
 
     internal static string FormatHardware(OemDriverPackage package)
     {
@@ -42,7 +61,7 @@ internal static class CoreIsolationDriverIdentityFormatter
                 var more = package.Devices.Count > devices.Length
                     ? $" (+{package.Devices.Count - devices.Length} more)"
                     : string.Empty;
-                return $"{package.ClassName} — {string.Join("; ", devices)}{more}";
+                return $"{string.Join("; ", devices)}{more} [{package.ClassName}]";
             }
 
             return package.TotalDeviceCount == 0
@@ -137,5 +156,26 @@ internal static class CoreIsolationDriverIdentityFormatter
         }
 
         return $"~{months} months (since {anchor.Value:yyyy-MM-dd})";
+    }
+
+    private static string FormatDriverFile(OemDriverPackage package, string? imageFileName)
+    {
+        var image = FirstImage(package, imageFileName);
+        if (!string.IsNullOrWhiteSpace(image))
+        {
+            return $"{image} · package {package.PublishedName} ({package.OriginalName})";
+        }
+
+        return $"{package.PublishedName} ({package.OriginalName})";
+    }
+
+    private static string? FirstImage(OemDriverPackage package, string? imageFileName)
+    {
+        if (!string.IsNullOrWhiteSpace(imageFileName))
+        {
+            return imageFileName;
+        }
+
+        return package.ImageFileNames.FirstOrDefault();
     }
 }

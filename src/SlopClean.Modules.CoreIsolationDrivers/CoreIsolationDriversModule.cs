@@ -16,6 +16,7 @@ public sealed class CoreIsolationDriversModule : IScannableModule, IApplicableMo
     private readonly ICodeIntegrityInspector _codeIntegrity;
     private readonly BoolParameter _includeDebugDetails;
     private readonly BoolParameter _allowRemoveInUseBlockers;
+    private readonly BoolParameter _includeOrphanOemPackages;
 
     public CoreIsolationDriversModule(
         IDriverStore driverStore,
@@ -33,16 +34,26 @@ public sealed class CoreIsolationDriversModule : IScannableModule, IApplicableMo
         _allowRemoveInUseBlockers = new BoolParameter(
             "AllowRemoveInUseBlockers",
             "Allow remove in-use blockers",
-            "WARNING: Removes driver packages still bound to devices. Risk of BSOD or broken hardware. Prefer vendor updates. Restore re-stages the package only (device binding not guaranteed).",
+            "WARNING: Removes CI-reported packages still bound to devices. Risk of BSOD or broken hardware. Prefer vendor updates. Restore re-stages the package only (device binding not guaranteed).",
+            defaultValue: false);
+        _includeOrphanOemPackages = new BoolParameter(
+            "IncludeOrphanOemPackages",
+            "Include orphan OEM packages",
+            "Optional broader cleanup: also list OEM packages with no associated devices. Off by default so results stay close to Windows Memory Integrity incompatible drivers.",
             defaultValue: false);
     }
 
     public string Id => ModuleId;
     public string Name => "Core Isolation Drivers";
     public string Description =>
-        "Finds orphan OEM driver packages and observed Code Integrity / HVCI signals that may block Memory Integrity. Removes orphans by default; in-use blockers only with explicit opt-in.";
+        "Finds OEM driver packages reported by Code Integrity / Memory Integrity as incompatible. Optional orphan OEM cleanup is opt-in; in-use CI blockers require explicit allow.";
     public ModuleCategory Category => ModuleCategory.Cleanup;
-    public IReadOnlyList<IModuleParameter> Parameters => [_includeDebugDetails, _allowRemoveInUseBlockers];
+    public IReadOnlyList<IModuleParameter> Parameters =>
+    [
+        _includeDebugDetails,
+        _allowRemoveInUseBlockers,
+        _includeOrphanOemPackages
+    ];
 
     public async IAsyncEnumerable<ScanFinding> ScanAsync(
         IReadOnlyDictionary<string, object?> parameters,
@@ -51,6 +62,7 @@ public sealed class CoreIsolationDriversModule : IScannableModule, IApplicableMo
     {
         var includeDebug = _includeDebugDetails.Resolve(parameters);
         var allowInUse = _allowRemoveInUseBlockers.Resolve(parameters);
+        var includeOrphans = _includeOrphanOemPackages.Resolve(parameters);
 
         progress?.Report(new ScanProgress(ModuleId, "Reading Device Guard status…", 0, 3));
         var status = _deviceGuard.GetSnapshot();
@@ -102,7 +114,7 @@ public sealed class CoreIsolationDriversModule : IScannableModule, IApplicableMo
                 Path: null,
                 SizeBytes: 0,
                 Risk: FindingRisk.Informational,
-                Details: $"{ci.FailureReason} Blocker detection is limited to orphan package analysis. This is not a complete Memory Integrity incompatibility scan.",
+                Details: $"{ci.FailureReason} Without CI signals, only optional orphan package cleanup can run. This is not a complete Memory Integrity incompatibility scan.",
                 IsActionable: false,
                 RequiredPrivilege: RequiredPrivilege.None,
                 AllowedRoot: null);
@@ -148,6 +160,11 @@ public sealed class CoreIsolationDriversModule : IScannableModule, IApplicableMo
             }
         }
 
+        if (!includeOrphans)
+        {
+            yield break;
+        }
+
         var completed = 0;
         foreach (var package in enumeration.Packages)
         {
@@ -155,7 +172,7 @@ public sealed class CoreIsolationDriversModule : IScannableModule, IApplicableMo
             completed++;
             progress?.Report(new ScanProgress(
                 ModuleId,
-                $"Classifying {package.PublishedName}",
+                $"Classifying orphans {package.PublishedName}",
                 completed,
                 enumeration.Packages.Count));
 
@@ -174,7 +191,10 @@ public sealed class CoreIsolationDriversModule : IScannableModule, IApplicableMo
                 continue;
             }
 
-            yield return CoreIsolationDriverFindingBuilder.BuildOrphanFinding(package, includeDebug);
+            yield return CoreIsolationDriverFindingBuilder.BuildOrphanFinding(
+                package,
+                includeDebug,
+                allowInUse);
             await Task.Yield();
         }
     }

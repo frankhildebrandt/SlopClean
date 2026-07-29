@@ -107,7 +107,7 @@ Never set `requireAdministrator` on the WinUI app.
 | DiskAnalyzer | No | Analysis only |
 | UninstallCleanup | Yes (conservative) | Orphaned uninstall/run entries; matching AppData leftovers are sized and deletable only when explicitly selected; backups via central restore store |
 | ServiceAdvisor | No | Read-only curated JSON recommendations |
-| CoreIsolationDrivers | Yes (gated) | Orphan OEM packages default Apply; in-use/CI blockers only with explicit opt-in + warning; CI = observed signals (not a full HVCI scan); elevated export/delete/restore; fail-closed incl. disconnected devices |
+| CoreIsolationDrivers | Yes (gated) | Default scope = CI/Memory Integrity incompatible OEM packages (not all orphans); optional orphan OEM cleanup opt-in; in-use CI blockers need explicit allow + warning; elevated export/delete/restore; fail-closed incl. disconnected devices |
 
 ### Out of MVP
 
