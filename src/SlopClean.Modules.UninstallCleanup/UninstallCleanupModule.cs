@@ -8,7 +8,7 @@ using SlopClean.Core.Safety;
 
 namespace SlopClean.Modules.UninstallCleanup;
 
-public sealed class UninstallCleanupModule : IScannableModule, IApplicableModule
+public sealed class UninstallCleanupModule : IScannableModule, IApplicableModule, IModuleIllustration
 {
     public const string ModuleId = "uninstall-cleanup";
 
@@ -37,6 +37,8 @@ public sealed class UninstallCleanupModule : IScannableModule, IApplicableModule
     public string Description => "Finds leftover uninstall registry entries and matching AppData folders after programs were removed.";
     public ModuleCategory Category => ModuleCategory.Uninstall;
     public IReadOnlyList<IModuleParameter> Parameters => [];
+
+    public Stream OpenIllustration() => EmbeddedResourceStreams.OpenModuleIllustration(typeof(UninstallCleanupModule));
 
     public async IAsyncEnumerable<ScanFinding> ScanAsync(
         IReadOnlyDictionary<string, object?> parameters,

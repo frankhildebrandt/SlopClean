@@ -15,14 +15,31 @@
             BorderThickness="1"
             CornerRadius="8"
             MinHeight="120">
-            <StackPanel Spacing="6">
-                <TextBlock Style="{StaticResource CaptionTextBlockStyle}" Text="{x:Bind Category, Mode=OneWay}" />
-                <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="{x:Bind Title, Mode=OneWay}" />
-                <TextBlock
-                    TextWrapping="Wrap"
-                    Opacity="0.8"
-                    Text="{x:Bind Description, Mode=OneWay}" />
-            </StackPanel>
+            <Grid ColumnSpacing="14">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Border
+                    Width="56"
+                    Height="56"
+                    VerticalAlignment="Top"
+                    CornerRadius="12">
+                    <Image
+                        Width="56"
+                        Height="56"
+                        Stretch="Uniform"
+                        Source="{x:Bind Illustration, Mode=OneWay}" />
+                </Border>
+                <StackPanel Grid.Column="1" Spacing="6">
+                    <TextBlock Style="{StaticResource CaptionTextBlockStyle}" Text="{x:Bind Category, Mode=OneWay}" />
+                    <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="{x:Bind Title, Mode=OneWay}" />
+                    <TextBlock
+                        TextWrapping="Wrap"
+                        Opacity="0.8"
+                        Text="{x:Bind Description, Mode=OneWay}" />
+                </StackPanel>
+            </Grid>
         </Border>
     </Button>
 </UserControl>

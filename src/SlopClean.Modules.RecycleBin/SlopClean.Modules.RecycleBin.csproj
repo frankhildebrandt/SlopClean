@@ -6,4 +6,7 @@
   <ItemGroup>
     <ProjectReference Include="..\SlopClean.Core\SlopClean.Core.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Assets\illustration.png" />
+  </ItemGroup>
 </Project>

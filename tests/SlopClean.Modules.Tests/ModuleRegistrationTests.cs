@@ -39,6 +39,29 @@ public class ModuleRegistrationTests
         Assert.Contains(modules, m => m is CoreIsolationDriversModule && m.Id == CoreIsolationDriversModule.ModuleId);
     }
 
+    [Fact]
+    public void AddSlopCleanModules_each_module_ships_png_illustration()
+    {
+        var services = new ServiceCollection();
+        RegisterPlatformFakes(services);
+        services.AddSlopCleanModules();
+
+        using var provider = services.BuildServiceProvider();
+        var modules = provider.GetServices<IModule>().ToList();
+
+        Assert.All(modules, module =>
+        {
+            var illustration = Assert.IsAssignableFrom<IModuleIllustration>(module);
+            using var stream = illustration.OpenIllustration();
+            Assert.True(stream.CanRead);
+            Assert.True(stream.Length > 32);
+
+            var header = new byte[8];
+            Assert.Equal(8, stream.Read(header, 0, 8));
+            Assert.Equal([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A], header);
+        });
+    }
+
     private static void RegisterPlatformFakes(IServiceCollection services)
     {
         services.AddSingleton<IFileSystem, FakeFileSystem>();

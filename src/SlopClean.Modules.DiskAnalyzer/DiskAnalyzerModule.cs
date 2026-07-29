@@ -7,7 +7,7 @@ using SlopClean.Core.Safety;
 
 namespace SlopClean.Modules.DiskAnalyzer;
 
-public sealed class DiskAnalyzerModule : IScannableModule
+public sealed class DiskAnalyzerModule : IScannableModule, IModuleIllustration
 {
     public const string ModuleId = "disk-analyzer";
 
@@ -34,6 +34,8 @@ public sealed class DiskAnalyzerModule : IScannableModule
     public string Description => "Finds the largest files and folders. Analysis only — no deletion.";
     public ModuleCategory Category => ModuleCategory.Analysis;
     public IReadOnlyList<IModuleParameter> Parameters => [_rootPath, _topN, _minSizeMb];
+
+    public Stream OpenIllustration() => EmbeddedResourceStreams.OpenModuleIllustration(typeof(DiskAnalyzerModule));
 
     public async IAsyncEnumerable<ScanFinding> ScanAsync(
         IReadOnlyDictionary<string, object?> parameters,

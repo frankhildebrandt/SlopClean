@@ -6,7 +6,7 @@ using SlopClean.Core.Parameters;
 
 namespace SlopClean.Modules.RecycleBin;
 
-public sealed class RecycleBinModule : IScannableModule, IApplicableModule
+public sealed class RecycleBinModule : IScannableModule, IApplicableModule, IModuleIllustration
 {
     public const string ModuleId = "recycle-bin";
     public const string EmptyOperation = PrivilegedOperationCodes.EmptyRecycleBin;
@@ -23,6 +23,8 @@ public sealed class RecycleBinModule : IScannableModule, IApplicableModule
     public string Description => "Shows Recycle Bin usage and empties it after confirmation.";
     public ModuleCategory Category => ModuleCategory.Cleanup;
     public IReadOnlyList<IModuleParameter> Parameters => [];
+
+    public Stream OpenIllustration() => EmbeddedResourceStreams.OpenModuleIllustration(typeof(RecycleBinModule));
 
     public async IAsyncEnumerable<ScanFinding> ScanAsync(
         IReadOnlyDictionary<string, object?> parameters,

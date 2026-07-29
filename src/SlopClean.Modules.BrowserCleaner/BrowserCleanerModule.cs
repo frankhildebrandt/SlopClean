@@ -9,7 +9,7 @@ using SlopClean.Core.Safety;
 
 namespace SlopClean.Modules.BrowserCleaner;
 
-public sealed class BrowserCleanerModule : IScannableModule, IApplicableModule
+public sealed class BrowserCleanerModule : IScannableModule, IApplicableModule, IModuleIllustration
 {
     public const string ModuleId = "browser-cleaner";
 
@@ -42,6 +42,8 @@ public sealed class BrowserCleanerModule : IScannableModule, IApplicableModule
     public string Description => "Cleans browser cache and optionally cookies/history.";
     public ModuleCategory Category => ModuleCategory.Browser;
     public IReadOnlyList<IModuleParameter> Parameters => [_includeCache, _includeCookies, _includeHistory];
+
+    public Stream OpenIllustration() => EmbeddedResourceStreams.OpenModuleIllustration(typeof(BrowserCleanerModule));
 
     public async IAsyncEnumerable<ScanFinding> ScanAsync(
         IReadOnlyDictionary<string, object?> parameters,

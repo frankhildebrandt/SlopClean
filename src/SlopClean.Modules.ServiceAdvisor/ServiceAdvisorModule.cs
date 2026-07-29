@@ -8,7 +8,7 @@ using SlopClean.Core.Parameters;
 
 namespace SlopClean.Modules.ServiceAdvisor;
 
-public sealed class ServiceAdvisorModule : IScannableModule
+public sealed class ServiceAdvisorModule : IScannableModule, IModuleIllustration
 {
     public const string ModuleId = "service-advisor";
 
@@ -26,6 +26,8 @@ public sealed class ServiceAdvisorModule : IScannableModule
     public string Description => "Read-only recommendations for optional Windows services. Never changes start types.";
     public ModuleCategory Category => ModuleCategory.Services;
     public IReadOnlyList<IModuleParameter> Parameters => [];
+
+    public Stream OpenIllustration() => EmbeddedResourceStreams.OpenModuleIllustration(typeof(ServiceAdvisorModule));
 
     public async IAsyncEnumerable<ScanFinding> ScanAsync(
         IReadOnlyDictionary<string, object?> parameters,

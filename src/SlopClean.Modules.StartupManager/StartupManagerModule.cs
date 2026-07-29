@@ -6,7 +6,7 @@ using SlopClean.Core.Parameters;
 
 namespace SlopClean.Modules.StartupManager;
 
-public sealed class StartupManagerModule : IScannableModule, IApplicableModule
+public sealed class StartupManagerModule : IScannableModule, IApplicableModule, IModuleIllustration
 {
     public const string ModuleId = "startup-manager";
     private const string RunKey = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Run";
@@ -25,6 +25,8 @@ public sealed class StartupManagerModule : IScannableModule, IApplicableModule
     public string Description => "Lists startup entries and allows enabling/disabling them.";
     public ModuleCategory Category => ModuleCategory.Startup;
     public IReadOnlyList<IModuleParameter> Parameters => [];
+
+    public Stream OpenIllustration() => EmbeddedResourceStreams.OpenModuleIllustration(typeof(StartupManagerModule));
 
     public async IAsyncEnumerable<ScanFinding> ScanAsync(
         IReadOnlyDictionary<string, object?> parameters,

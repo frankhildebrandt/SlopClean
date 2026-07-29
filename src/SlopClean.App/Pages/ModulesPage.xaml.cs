@@ -18,7 +18,12 @@ public sealed partial class ModulesPage : Page
             registry.All.Select(m =>
             {
                 var (name, description) = ModuleLocalization.Resolve(m);
-                return new ModuleSummaryViewModel(m.Id, name, description, m.Category.ToString());
+                return new ModuleSummaryViewModel(
+                    m.Id,
+                    name,
+                    description,
+                    m.Category.ToString(),
+                    ModuleImagery.Load(m));
             }));
         InitializeComponent();
     }

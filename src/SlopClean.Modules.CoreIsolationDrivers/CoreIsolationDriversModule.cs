@@ -7,7 +7,7 @@ using SlopClean.Core.Safety;
 
 namespace SlopClean.Modules.CoreIsolationDrivers;
 
-public sealed class CoreIsolationDriversModule : IScannableModule, IApplicableModule
+public sealed class CoreIsolationDriversModule : IScannableModule, IApplicableModule, IModuleIllustration
 {
     public const string ModuleId = "core-isolation-drivers";
     private static readonly TimeSpan CiLookback = TimeSpan.FromDays(30);
@@ -57,6 +57,8 @@ public sealed class CoreIsolationDriversModule : IScannableModule, IApplicableMo
         _allowRemoveInUseBlockers,
         _includeOrphanOemPackages
     ];
+
+    public Stream OpenIllustration() => EmbeddedResourceStreams.OpenModuleIllustration(typeof(CoreIsolationDriversModule));
 
     public async IAsyncEnumerable<ScanFinding> ScanAsync(
         IReadOnlyDictionary<string, object?> parameters,

@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
+using Microsoft.UI.Xaml.Media;
 using SlopClean.App.Helpers;
 using SlopClean.Core.Engine;
 using SlopClean.Core.Models;
@@ -24,7 +25,12 @@ public partial class DashboardViewModel : ObservableObject
             _registry.All.Select(m =>
             {
                 var (name, description) = ModuleLocalization.Resolve(m);
-                return new ModuleSummaryViewModel(m.Id, name, description, m.Category.ToString());
+                return new ModuleSummaryViewModel(
+                    m.Id,
+                    name,
+                    description,
+                    m.Category.ToString(),
+                    ModuleImagery.Load(m));
             }));
     }
 
@@ -89,16 +95,18 @@ public partial class DashboardViewModel : ObservableObject
 
 public sealed class ModuleSummaryViewModel
 {
-    public ModuleSummaryViewModel(string id, string name, string description, string category)
+    public ModuleSummaryViewModel(string id, string name, string description, string category, ImageSource illustration)
     {
         Id = id;
         Name = name;
         Description = description;
         Category = category;
+        Illustration = illustration;
     }
 
     public string Id { get; set; }
     public string Name { get; set; }
     public string Description { get; set; }
     public string Category { get; set; }
+    public ImageSource Illustration { get; set; }
 }

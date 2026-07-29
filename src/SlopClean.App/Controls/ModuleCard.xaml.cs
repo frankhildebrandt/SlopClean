@@ -1,5 +1,6 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
 
 namespace SlopClean.App.Controls;
 
@@ -16,6 +17,9 @@ public sealed partial class ModuleCard : UserControl
 
     public static readonly DependencyProperty ModuleIdProperty =
         DependencyProperty.Register(nameof(ModuleId), typeof(string), typeof(ModuleCard), new PropertyMetadata(""));
+
+    public static readonly DependencyProperty IllustrationProperty =
+        DependencyProperty.Register(nameof(Illustration), typeof(ImageSource), typeof(ModuleCard), new PropertyMetadata(null));
 
     public event EventHandler<string>? OpenRequested;
 
@@ -46,6 +50,12 @@ public sealed partial class ModuleCard : UserControl
     {
         get => (string)GetValue(ModuleIdProperty);
         set => SetValue(ModuleIdProperty, value);
+    }
+
+    public ImageSource? Illustration
+    {
+        get => (ImageSource?)GetValue(IllustrationProperty);
+        set => SetValue(IllustrationProperty, value);
     }
 
     private void Open_Click(object sender, RoutedEventArgs e)

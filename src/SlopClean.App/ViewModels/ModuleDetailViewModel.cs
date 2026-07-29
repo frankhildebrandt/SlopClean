@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Dispatching;
+using Microsoft.UI.Xaml.Media;
 using SlopClean.App.Helpers;
 using SlopClean.App.Pages;
 using SlopClean.App.Services;
@@ -50,6 +51,9 @@ public partial class ModuleDetailViewModel : ObservableObject
     public partial string Description { get; set; } = "";
 
     [ObservableProperty]
+    public partial ImageSource Illustration { get; set; } = ModuleImagery.BrandMark;
+
+    [ObservableProperty]
     public partial bool IsBusy { get; set; }
 
     [ObservableProperty]
@@ -64,6 +68,7 @@ public partial class ModuleDetailViewModel : ObservableObject
         var (name, description) = ModuleLocalization.Resolve(_module);
         Title = name;
         Description = description;
+        Illustration = ModuleImagery.Load(_module);
         Parameters.Clear();
         Findings.Clear();
 

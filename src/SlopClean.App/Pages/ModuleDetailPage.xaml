@@ -13,10 +13,23 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <StackPanel Spacing="4">
-            <TextBlock Style="{StaticResource TitleTextBlockStyle}" Text="{x:Bind ViewModel.Title, Mode=OneWay}" />
-            <TextBlock TextWrapping="Wrap" Text="{x:Bind ViewModel.Description, Mode=OneWay}" />
-        </StackPanel>
+        <Grid ColumnSpacing="16">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <Border Width="72" Height="72" CornerRadius="16">
+                <Image
+                    Width="72"
+                    Height="72"
+                    Stretch="Uniform"
+                    Source="{x:Bind ViewModel.Illustration, Mode=OneWay}" />
+            </Border>
+            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="4">
+                <TextBlock Style="{StaticResource TitleTextBlockStyle}" Text="{x:Bind ViewModel.Title, Mode=OneWay}" />
+                <TextBlock TextWrapping="Wrap" Text="{x:Bind ViewModel.Description, Mode=OneWay}" />
+            </StackPanel>
+        </Grid>
 
         <controls:ParameterForm
             Grid.Row="1"

@@ -6,9 +6,20 @@
     xmlns:models="using:SlopClean.App.Models">
     <ScrollViewer Padding="24">
         <StackPanel Spacing="12" MaxWidth="720">
-            <TextBlock Style="{StaticResource TitleTextBlockStyle}" Text="{x:Bind ViewModel.Title}" />
+            <StackPanel Orientation="Horizontal" Spacing="16">
+                <Border Width="72" Height="72" CornerRadius="16">
+                    <Image
+                        Width="72"
+                        Height="72"
+                        Stretch="Uniform"
+                        Source="ms-appx:///Assets/BrandMark.png" />
+                </Border>
+                <StackPanel VerticalAlignment="Center" Spacing="4">
+                    <TextBlock Style="{StaticResource TitleTextBlockStyle}" Text="{x:Bind ViewModel.Title}" />
+                    <TextBlock Text="{x:Bind ViewModel.VersionText}" />
+                </StackPanel>
+            </StackPanel>
             <TextBlock TextWrapping="Wrap" Text="{x:Bind ViewModel.Blurb}" />
-            <TextBlock Text="{x:Bind ViewModel.VersionText}" />
 
             <StackPanel Orientation="Horizontal" Spacing="16">
                 <HyperlinkButton

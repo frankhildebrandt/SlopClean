@@ -8,7 +8,7 @@ using SlopClean.Core.Safety;
 
 namespace SlopClean.Modules.TempCleaner;
 
-public sealed class TempCleanerModule : IScannableModule, IApplicableModule
+public sealed class TempCleanerModule : IScannableModule, IApplicableModule, IModuleIllustration
 {
     public const string ModuleId = "temp-cleaner";
 
@@ -46,6 +46,8 @@ public sealed class TempCleanerModule : IScannableModule, IApplicableModule
     public string Description => "Finds and removes safe temporary files.";
     public ModuleCategory Category => ModuleCategory.Cleanup;
     public IReadOnlyList<IModuleParameter> Parameters => [_includeWindowsTemp, _includeUserTemp, _minAgeDays];
+
+    public Stream OpenIllustration() => EmbeddedResourceStreams.OpenModuleIllustration(typeof(TempCleanerModule));
 
     public async IAsyncEnumerable<ScanFinding> ScanAsync(
         IReadOnlyDictionary<string, object?> parameters,

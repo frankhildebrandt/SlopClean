@@ -17,6 +17,7 @@
                         <controls:ModuleCard
                             Category="{x:Bind Category}"
                             Description="{x:Bind Description}"
+                            Illustration="{x:Bind Illustration}"
                             ModuleId="{x:Bind Id}"
                             Title="{x:Bind Name}"
                             OpenRequested="ModuleCard_OpenRequested" />
