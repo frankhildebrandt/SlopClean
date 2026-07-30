@@ -22,6 +22,11 @@ public sealed class AboutViewModel : ObservableObject
         SourceLabel = resources.GetString("AboutSourceLabel");
         LicenseLabel = resources.GetString("AboutLicenseLabel");
         ReviewHint = resources.GetString("AboutReviewHint");
+        EuAiActBadge = resources.GetString("AboutEuAiActBadge");
+        EuAiActTitle = resources.GetString("AboutEuAiActTitle");
+        EuAiActMeta = resources.GetString("AboutEuAiActMeta");
+        EuAiActProvenance = resources.GetString("AboutEuAiActProvenance");
+        EuAiActBody = resources.GetString("AboutEuAiActBody");
         OpenSourceSectionTitle = resources.GetString("AboutOpenSourceTitle");
 
         Credits =
@@ -67,6 +72,11 @@ public sealed class AboutViewModel : ObservableObject
     public string LicenseLabel { get; }
     public Uri LicenseUrl => LicenseUri;
     public string ReviewHint { get; }
+    public string EuAiActBadge { get; }
+    public string EuAiActTitle { get; }
+    public string EuAiActMeta { get; }
+    public string EuAiActProvenance { get; }
+    public string EuAiActBody { get; }
     public string OpenSourceSectionTitle { get; }
     public IReadOnlyList<OpenSourceCredit> Credits { get; }
 

@@ -32,6 +32,47 @@
 
             <TextBlock TextWrapping="Wrap" Text="{x:Bind ViewModel.ReviewHint}" />
 
+            <Border
+                Margin="0,8,0,0"
+                Padding="16"
+                BorderBrush="{ThemeResource AccentFillColorDefaultBrush}"
+                BorderThickness="2"
+                CornerRadius="8"
+                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                <StackPanel Spacing="8">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Border
+                            Padding="10,4"
+                            CornerRadius="4"
+                            Background="{ThemeResource AccentFillColorDefaultBrush}">
+                            <TextBlock
+                                FontWeight="SemiBold"
+                                Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}"
+                                Text="{x:Bind ViewModel.EuAiActBadge}" />
+                        </Border>
+                        <Border
+                            Padding="10,4"
+                            CornerRadius="4"
+                            BorderBrush="{ThemeResource AccentFillColorDefaultBrush}"
+                            BorderThickness="1"
+                            Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}">
+                            <TextBlock
+                                FontWeight="SemiBold"
+                                Text="{x:Bind ViewModel.EuAiActProvenance}" />
+                        </Border>
+                    </StackPanel>
+                    <TextBlock
+                        Style="{StaticResource SubtitleTextBlockStyle}"
+                        Text="{x:Bind ViewModel.EuAiActTitle}" />
+                    <TextBlock
+                        Opacity="0.8"
+                        Style="{StaticResource CaptionTextBlockStyle}"
+                        TextWrapping="Wrap"
+                        Text="{x:Bind ViewModel.EuAiActMeta}" />
+                    <TextBlock TextWrapping="Wrap" Text="{x:Bind ViewModel.EuAiActBody}" />
+                </StackPanel>
+            </Border>
+
             <TextBlock
                 Margin="0,12,0,0"
                 Style="{StaticResource SubtitleTextBlockStyle}"

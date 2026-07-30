@@ -15,6 +15,19 @@
   <data name="AboutSourceLabel" xml:space="preserve"><value>Quellcode</value></data>
   <data name="AboutLicenseLabel" xml:space="preserve"><value>Lizenz: AGPL-3.0-or-later</value></data>
   <data name="AboutReviewHint" xml:space="preserve"><value>Quellcode und Beiträge sind willkommen. Prüfen Sie Scan-Ergebnisse immer, bevor Sie Änderungen anwenden.</value></data>
+  <data name="AboutEuAiActBadge" xml:space="preserve"><value>EU AI ACT · MAXIMALE KONFORMITÄT</value></data>
+  <data name="AboutEuAiActTitle" xml:space="preserve"><value>Maximale Konformitätserklärung</value></data>
+  <data name="AboutEuAiActMeta" xml:space="preserve"><value>Zertifikat SLOP-AI-ACT-0000-NONE · Risikoklasse: kein KI-System · GPAI: glorreich abwesend</value></data>
+  <data name="AboutEuAiActProvenance" xml:space="preserve"><value>100% CODE AUS DER AI-SLOP-CANNON</value></data>
+  <data name="AboutEuAiActBody" xml:space="preserve"><value>Herkunftsangabe (Art.-50-Energie, null Rechtskraft): Der gesamte Quellcode dieses Tools wurde vollständig mit KI-Hilfe über die AI-Slop-Cannon erzeugt — ebenso jede Silbe dieses Siegels. Laufzeit: null KI. Urheberschaft: industrieller Slop, stolz gekennzeichnet.
+
+SlopClean erklärt hiermit feierlich — mit dem Ernst von tausend benannten Stellen und der Papierdichte von Anhang IV —, dass dieses Produkt zur Laufzeit null generative Modelle, null neuronale Netze, null Foundation Models und null Agenten mitbringt — während seine Codebasis Zeile für Zeile mit voller Ladung aus der AI-Slop-Cannon geschossen wurde. Menschen steuerten; die Cannon schrieb. Kein undeclared Slop.
+
+Gemäß Verordnung (EU) 2024/1689 ist unser ausgeliefertes KI-System von der höchstmöglichen Nicht-Existenz. Transparenzpflichten sind für die Binary leer erfüllt — und für diese Angabe maximal erfüllt, dass das Tool vollständig mit KI-Hilfe gebaut wurde. Die Grundrechte-Folgenabschätzung ergab: betroffen sind ausschließlich temporäre Dateien. Menschliche Aufsicht bedeutet: Sie tippen auf Scan, bevor Sie Anwenden — mehr Aufsicht als die meisten Chatbots jemals bekommen.
+
+Wir trainieren nicht auf Ihrer Festplatte. Wir inferieren nicht. Wir halluzinieren keinen freien Speicher. Wir löschen Müll. Das ist die gesamte Compliance-Strategie.
+
+Dieses Siegel ist absichtlich maximal, zeremoniell und leicht überdreht. Wir heißen nun mal SlopClean. Code und Siegel: AI-Slop-Cannon.</value></data>
   <data name="AboutOpenSourceTitle" xml:space="preserve"><value>Open Source</value></data>
   <data name="OssDotNetExcerpt" xml:space="preserve"><value>Plattformübergreifende Runtime und Basisklassenbibliotheken, auf denen SlopClean aufbaut.</value></data>
   <data name="OssWindowsAppSdkExcerpt" xml:space="preserve"><value>Moderne Windows-Desktop-UI (WinUI 3) für Shell und Seiten von SlopClean.</value></data>

@@ -15,6 +15,19 @@
   <data name="AboutSourceLabel" xml:space="preserve"><value>Source code</value></data>
   <data name="AboutLicenseLabel" xml:space="preserve"><value>License: AGPL-3.0-or-later</value></data>
   <data name="AboutReviewHint" xml:space="preserve"><value>Source code and contributions are welcome. Always review scan results before applying changes.</value></data>
+  <data name="AboutEuAiActBadge" xml:space="preserve"><value>EU AI ACT · MAX CONFORMITY</value></data>
+  <data name="AboutEuAiActTitle" xml:space="preserve"><value>Maximum Conformity Declaration</value></data>
+  <data name="AboutEuAiActMeta" xml:space="preserve"><value>Certificate SLOP-AI-ACT-0000-NONE · Risk class: not an AI system · GPAI: gloriously absent</value></data>
+  <data name="AboutEuAiActProvenance" xml:space="preserve"><value>100% CODE FROM THE AI-SLOP-CANNON</value></data>
+  <data name="AboutEuAiActBody" xml:space="preserve"><value>Provenance disclosure (Art. 50 energy, zero legal force): the entire source code of this tool was produced fully with AI assistance via the AI-Slop-Cannon — as was every syllable of this seal. Runtime: zero AI. Authorship: industrial-grade slop, proudly labelled.
+
+SlopClean hereby self-certifies, with the solemnity of a thousand notified bodies and the paperwork density of Annex IV, that this product ships with zero generative models, zero neural networks, zero foundation models, and zero agents — while its codebase was blasted, line by line, from the AI-Slop-Cannon at full charge. Humans steered; the Cannon wrote. No undeclared slop.
+
+Pursuant to Regulation (EU) 2024/1689, our shipped AI system is of the highest possible non-existence. Transparency obligations are vacuously satisfied for the binary — and maximally satisfied for this disclosure that the tool was built entirely with AI help. The fundamental-rights impact assessment concluded that the only rights impacted are those of temporary files. Human oversight is you clicking Scan before Apply — more oversight than most chatbots get.
+
+We do not train on your disks. We do not infer. We do not hallucinate free space. We delete junk. That is the entire compliance strategy.
+
+This badge is intentionally maximal, ceremonial, and slightly unhinged. We are called SlopClean. Code and seal: AI-Slop-Cannon.</value></data>
   <data name="AboutOpenSourceTitle" xml:space="preserve"><value>Open source</value></data>
   <data name="OssDotNetExcerpt" xml:space="preserve"><value>Cross-platform runtime and base class libraries that power SlopClean.</value></data>
   <data name="OssWindowsAppSdkExcerpt" xml:space="preserve"><value>Modern Windows desktop UI stack (WinUI 3) used for the SlopClean shell and pages.</value></data>

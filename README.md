@@ -4,6 +4,20 @@ Free, open-source Windows cleanup and optimization tool — modular, preview-fir
 
 **License:** [AGPL-3.0-or-later](LICENSE)
 
+> ### 🇪🇺 EU AI Act — Maximum Conformity Declaration
+>
+> **Certificate ID:** `SLOP-AI-ACT-0000-NONE` · **Risk class:** *not an AI system* · **GPAI:** *gloriously absent*
+>
+> **Provenance:** 💯 **100% AI-Slop-Cannon** — the **entire source code of this tool** was produced fully with AI assistance (as was every syllable of this badge). Runtime: zero AI. Authorship: industrial-grade slop, proudly labelled.
+>
+> SlopClean hereby self-certifies, with the solemnity of a thousand notified bodies and the paperwork density of Annex IV, that this product **ships with** zero generative models, zero neural networks, zero foundation models, and zero agents — while its **codebase** was blasted, line by line, from the AI-Slop-Cannon at full charge. Humans steered; the Cannon wrote. No undeclared slop.
+>
+> Pursuant to Regulation (EU) 2024/1689, our *shipped* AI system is of the highest possible non-existence. Transparency obligations are vacuously satisfied for the binary — and maximally satisfied for this disclosure that the tool was built entirely with AI help. The fundamental-rights impact assessment concluded that the only rights impacted are those of temporary files. Human oversight is provided by you clicking **Scan** before **Apply** — which is more oversight than most chatbots get.
+>
+> We do not train on your disks. We do not infer. We do not hallucinate free space. We delete junk. That is the entire compliance strategy.
+>
+> *This badge is intentionally maximal, ceremonial, and slightly unhinged. We are called SlopClean. Code and seal: AI-Slop-Cannon.*
+
 ## Features (MVP)
 
 - Temp Cleaner
