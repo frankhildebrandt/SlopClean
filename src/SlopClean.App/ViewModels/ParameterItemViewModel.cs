@@ -18,28 +18,30 @@ public partial class ParameterItemViewModel : ObservableObject
     public bool IsBool => Parameter is BoolParameter;
     public bool IsInt => Parameter is IntParameter;
     public bool IsEnum => Parameter is EnumParameter;
+    public bool IsPathList => Parameter is PathListParameter;
     public IReadOnlyList<string> EnumValues => Parameter is EnumParameter e ? e.AllowedValues : [];
 
     [ObservableProperty]
     public partial object? Value { get; set; }
 
     /// <summary>
-    /// Typed value suitable for <see cref="SlopClean.Core.Parameters.ParameterValidator"/>.
+    /// Typed value suitable for <see cref="ParameterValidator"/>.
     /// </summary>
     public object? TypedValue => Parameter switch
     {
         BoolParameter => BoolValue,
         IntParameter => IntValue,
         EnumParameter => StringValue,
+        PathListParameter => ParameterValueCoercion.CoercePathList(Parameter, Value),
         _ => Value
     };
 
     public bool BoolValue
     {
-        get => Value is true;
+        get => ParameterValueCoercion.ReadBool(Parameter, Value);
         set
         {
-            if (!IsBool || Value is true == value)
+            if (!IsBool || BoolValue == value)
             {
                 return;
             }
@@ -50,11 +52,7 @@ public partial class ParameterItemViewModel : ObservableObject
 
     public int IntValue
     {
-        get => Value is int i
-            ? i
-            : Value is long l
-                ? (int)l
-                : Convert.ToInt32(Parameter.DefaultValue ?? 0);
+        get => ParameterValueCoercion.ReadInt(Parameter, Value);
         set
         {
             if (!IsInt)
@@ -91,12 +89,35 @@ public partial class ParameterItemViewModel : ObservableObject
         }
     }
 
+    public string PathsText
+    {
+        get => ParameterValueCoercion.FormatPathList(
+            ParameterValueCoercion.CoercePathList(Parameter, Value));
+        set
+        {
+            if (!IsPathList)
+            {
+                return;
+            }
+
+            var next = ParameterValueCoercion.ParsePathList(value);
+            var current = ParameterValueCoercion.CoercePathList(Parameter, Value);
+            if (current.SequenceEqual(next, StringComparer.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            Value = next;
+        }
+    }
+
     partial void OnValueChanged(object? value)
     {
         // Keep typed accessors in sync for x:Bind without re-entering TwoWay controls.
         OnPropertyChanged(nameof(BoolValue));
         OnPropertyChanged(nameof(IntValue));
         OnPropertyChanged(nameof(StringValue));
+        OnPropertyChanged(nameof(PathsText));
         OnPropertyChanged(nameof(TypedValue));
     }
 }

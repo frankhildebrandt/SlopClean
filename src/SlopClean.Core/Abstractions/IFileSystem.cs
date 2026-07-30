@@ -16,6 +16,7 @@ public interface IFileSystem
     void MoveFile(string sourcePath, string destinationPath, bool overwrite = true);
     void WriteAllText(string path, string contents);
     string ReadAllText(string path);
+    Stream OpenRead(string path);
     string GetFullPath(string path);
     string GetTempPath();
     string GetFolderPath(SpecialFolderKind folder);

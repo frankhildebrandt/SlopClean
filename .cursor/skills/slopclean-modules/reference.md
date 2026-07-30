@@ -64,7 +64,7 @@ Driver package delete/restore must be elevated; engine fail-closes if marked oth
 
 `src/SlopClean.Core/Parameters/`: `BoolParameter`, `IntParameter`, `EnumParameter`, `PathListParameter`.
 
-Use `parameter.Resolve(parametersDictionary)` in `ScanAsync`. Saved presets are restored generically in the App.
+Use `parameter.Resolve(parametersDictionary)` in `ScanAsync`. Saved presets are restored via `ParameterValueCoercion.CoercePreset` in the App. `ParameterForm` editors: ToggleSwitch / NumberBox / ComboBox / multiline TextBox (PathList). Typed accessors must stay fail-safe — WinUI may evaluate `IntValue` binds even when `x:Load` hides the NumberBox.
 
 ## Localization
 
@@ -90,7 +90,7 @@ Shared fakes: `tests/SlopClean.Modules.TestSupport/`.
 | `recycle-bin` | `SlopClean.Modules.RecycleBin` | Yes |
 | `browser-cleaner` | `SlopClean.Modules.BrowserCleaner` | Yes |
 | `startup-manager` | `SlopClean.Modules.StartupManager` | Yes |
-| `disk-analyzer` | `SlopClean.Modules.DiskAnalyzer` | No |
+| `disk-analyzer` | `SlopClean.Modules.DiskAnalyzer` | No (LargestFiles / Duplicates via size then SHA-1; needs `IFileSystem.OpenRead`) |
 | `uninstall-cleanup` | `SlopClean.Modules.UninstallCleanup` | Yes |
 | `service-advisor` | `SlopClean.Modules.ServiceAdvisor` | No |
 | `core-isolation-drivers` | `SlopClean.Modules.CoreIsolationDrivers` | Yes (gated/elevated) |

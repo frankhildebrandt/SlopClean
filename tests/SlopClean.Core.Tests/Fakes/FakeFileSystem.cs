@@ -9,6 +9,7 @@ public sealed class FakeFileSystem : IFileSystem
     public HashSet<string> ReparsePoints { get; } = new(StringComparer.OrdinalIgnoreCase);
     public Dictionary<string, long> FileSizes { get; } = new(StringComparer.OrdinalIgnoreCase);
     public Dictionary<string, string> FileContents { get; } = new(StringComparer.OrdinalIgnoreCase);
+    public Dictionary<string, byte[]> FileBytes { get; } = new(StringComparer.OrdinalIgnoreCase);
     public Dictionary<SpecialFolderKind, string> Folders { get; } = new();
 
     public bool DirectoryExists(string path) => Directories.Contains(Path.GetFullPath(path));
@@ -87,6 +88,7 @@ public sealed class FakeFileSystem : IFileSystem
         Files.Remove(full);
         FileSizes.Remove(full);
         FileContents.Remove(full);
+        FileBytes.Remove(full);
     }
 
     public void DeleteDirectory(string path, bool recursive)
@@ -99,6 +101,7 @@ public sealed class FakeFileSystem : IFileSystem
                 Files.Remove(file);
                 FileSizes.Remove(file);
                 FileContents.Remove(file);
+                FileBytes.Remove(file);
             }
 
             foreach (var dir in Directories.Where(d => d.StartsWith(full, StringComparison.OrdinalIgnoreCase)).ToArray())
@@ -135,6 +138,11 @@ public sealed class FakeFileSystem : IFileSystem
         {
             FileContents[dest] = content;
         }
+
+        if (FileBytes.TryGetValue(source, out var bytes))
+        {
+            FileBytes[dest] = bytes;
+        }
     }
 
     public void MoveFile(string sourcePath, string destinationPath, bool overwrite = true)
@@ -163,6 +171,27 @@ public sealed class FakeFileSystem : IFileSystem
         return FileContents.GetValueOrDefault(full, string.Empty);
     }
 
+    public Stream OpenRead(string path)
+    {
+        var full = Path.GetFullPath(path);
+        if (!Files.Contains(full))
+        {
+            throw new FileNotFoundException(full);
+        }
+
+        if (FileBytes.TryGetValue(full, out var bytes))
+        {
+            return new MemoryStream(bytes, writable: false);
+        }
+
+        if (FileContents.TryGetValue(full, out var text))
+        {
+            return new MemoryStream(System.Text.Encoding.UTF8.GetBytes(text), writable: false);
+        }
+
+        throw new IOException($"No content seeded for '{full}'.");
+    }
+
     public string GetFullPath(string path) => Path.GetFullPath(path);
     public string GetTempPath() => GetFolderPath(SpecialFolderKind.UserTemp);
     public string GetFolderPath(SpecialFolderKind folder) => Folders[folder];
@@ -174,6 +203,16 @@ public sealed class FakeFileSystem : IFileSystem
         var full = Path.GetFullPath(path);
         Files.Add(full);
         FileSizes[full] = size;
+        EnsureDirectory(Path.GetDirectoryName(full)!);
+    }
+
+    public void AddFile(string path, byte[] content)
+    {
+        ArgumentNullException.ThrowIfNull(content);
+        var full = Path.GetFullPath(path);
+        Files.Add(full);
+        FileBytes[full] = content;
+        FileSizes[full] = content.LongLength;
         EnsureDirectory(Path.GetDirectoryName(full)!);
     }
 

@@ -24,7 +24,7 @@ Free, open-source Windows cleanup and optimization tool — modular, preview-fir
 - Browser Cleaner (Chrome / Edge / Firefox)
 - Recycle Bin
 - Startup Manager
-- Disk Analyzer (read-only)
+- Disk Analyzer (read-only: largest files or duplicates via size then SHA-1)
 - Uninstall Cleanup (conservative leftover detection; AppData leftovers selectable)
 - Review step before apply, Clean Tasks page with todo-style progress, local backups, in-app Restore
 - Service Advisor (read-only recommendations)

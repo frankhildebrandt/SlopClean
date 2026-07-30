@@ -92,37 +92,7 @@ public partial class ModuleDetailViewModel : ObservableObject
     }
 
     private static object? CoercePresetValue(IModuleParameter parameter, object? value)
-    {
-        if (value is null)
-        {
-            return parameter.DefaultValue;
-        }
-
-        if (parameter is BoolParameter)
-        {
-            return value switch
-            {
-                bool b => b,
-                string s when bool.TryParse(s, out var parsed) => parsed,
-                _ => parameter.DefaultValue
-            };
-        }
-
-        if (parameter is IntParameter)
-        {
-            return value switch
-            {
-                int i => i,
-                long l => (int)l,
-                double d => (int)d,
-                string s when int.TryParse(s, out var parsed) => parsed,
-                System.Text.Json.JsonElement je when je.TryGetInt32(out var parsed) => parsed,
-                _ => parameter.DefaultValue
-            };
-        }
-
-        return value is string or int or bool ? value : value.ToString();
-    }
+        => ParameterValueCoercion.CoercePreset(parameter, value);
 
     [RelayCommand]
     private async Task ScanAsync()
@@ -146,10 +116,16 @@ public partial class ModuleDetailViewModel : ObservableObject
             var dispatcher = DispatcherQueue.GetForCurrentThread();
             var progress = new Progress<ScanProgress>(p =>
             {
-                dispatcher.TryEnqueue(() => StatusText = p.Message);
+                dispatcher.TryEnqueue(() =>
+                {
+                    StatusText = p.CompletedItems > 0
+                        ? $"{p.Message} ({p.CompletedItems:N0})"
+                        : p.Message;
+                });
             });
 
-            await foreach (var finding in _engine.ScanModuleAsync(_module.Id, values, progress, _cts.Token))
+            await foreach (var finding in _engine.ScanModuleAsync(_module.Id, values, progress, _cts.Token)
+                               .ConfigureAwait(true))
             {
                 Findings.Add(new FindingItemViewModel(finding));
             }

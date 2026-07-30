@@ -23,7 +23,8 @@
                                 TextWrapping="Wrap"
                                 Text="{x:Bind Description}" />
                         </StackPanel>
-                        <!-- x:Load avoids collapsed NumberBox/ComboBox TwoWay bindings overwriting bool values. -->
+                        <!-- x:Load avoids collapsed NumberBox/ComboBox TwoWay bindings overwriting bool values.
+                             Typed accessors must still be fail-safe: WinUI may evaluate binds for unloaded editors. -->
                         <ToggleSwitch
                             x:Name="BoolEditor"
                             Grid.Column="1"
@@ -42,6 +43,15 @@
                             x:Load="{x:Bind IsEnum}"
                             ItemsSource="{x:Bind EnumValues}"
                             SelectedItem="{x:Bind StringValue, Mode=TwoWay}" />
+                        <TextBox
+                            x:Name="PathListEditor"
+                            Grid.Column="1"
+                            x:Load="{x:Bind IsPathList}"
+                            AcceptsReturn="True"
+                            MinHeight="64"
+                            TextWrapping="Wrap"
+                            PlaceholderText="One path per line"
+                            Text="{x:Bind PathsText, Mode=TwoWay}" />
                     </Grid>
                 </DataTemplate>
             </ItemsRepeater.ItemTemplate>

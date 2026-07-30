@@ -43,4 +43,5 @@ Dieses Siegel ist absichtlich maximal, zeremoniell und leicht überdreht. Wir he
   <data name="QuickScan" xml:space="preserve"><value>Schnellscan</value></data>
   <data name="ApplySelected" xml:space="preserve"><value>Auswahl anwenden</value></data>
   <data name="PrivacyNotice" xml:space="preserve"><value>SlopClean speichert Protokolle nur lokal. Pfade werden redigiert. Es wird keine Telemetrie gesendet.</value></data>
+  <data name="FindingList_GoToFolder" xml:space="preserve"><value>Ordner öffnen</value></data>
 </root>

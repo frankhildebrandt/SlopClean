@@ -43,4 +43,5 @@ This badge is intentionally maximal, ceremonial, and slightly unhinged. We are c
   <data name="QuickScan" xml:space="preserve"><value>Quick Scan</value></data>
   <data name="ApplySelected" xml:space="preserve"><value>Apply selected</value></data>
   <data name="PrivacyNotice" xml:space="preserve"><value>SlopClean stores logs locally only. Paths are redacted. No telemetry is sent.</value></data>
+  <data name="FindingList_GoToFolder" xml:space="preserve"><value>Go to Folder</value></data>
 </root>

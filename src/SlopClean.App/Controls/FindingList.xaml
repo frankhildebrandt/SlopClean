@@ -10,6 +10,14 @@
         <ListView.ItemTemplate>
             <DataTemplate x:DataType="vm:FindingItemViewModel">
                 <Grid Padding="8,6" ColumnSpacing="12">
+                    <Grid.ContextFlyout>
+                        <MenuFlyout>
+                            <MenuFlyoutItem
+                                Command="{x:Bind GoToFolderCommand}"
+                                IsEnabled="{x:Bind CanGoToFolder}"
+                                Text="{x:Bind GoToFolderLabel}" />
+                        </MenuFlyout>
+                    </Grid.ContextFlyout>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />

@@ -64,7 +64,18 @@ public class ModuleRegistrationTests
 
     private static void RegisterPlatformFakes(IServiceCollection services)
     {
-        services.AddSingleton<IFileSystem, FakeFileSystem>();
+        var fs = new FakeFileSystem();
+        fs.Folders[SpecialFolderKind.Windows] = @"C:\Windows";
+        fs.Folders[SpecialFolderKind.System] = @"C:\Windows\System32";
+        fs.Folders[SpecialFolderKind.UserProfile] = @"C:\Users\Test";
+        fs.Folders[SpecialFolderKind.ApplicationData] = @"C:\Users\Test\AppData\Roaming";
+        fs.Folders[SpecialFolderKind.LocalApplicationData] = @"C:\Users\Test\AppData\Local";
+        fs.Folders[SpecialFolderKind.CommonApplicationData] = @"C:\ProgramData";
+        fs.Folders[SpecialFolderKind.UserTemp] = @"C:\Users\Test\AppData\Local\Temp";
+        fs.Folders[SpecialFolderKind.WindowsTemp] = @"C:\Windows\Temp";
+        fs.Folders[SpecialFolderKind.Startup] = @"C:\Users\Test\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup";
+        fs.Folders[SpecialFolderKind.CommonStartup] = @"C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Startup";
+        services.AddSingleton<IFileSystem>(fs);
         services.AddSingleton<IRegistryStore, EmptyRegistryStore>();
         services.AddSingleton<IProcessInspector, EmptyProcessInspector>();
         services.AddSingleton<IRecycleBinService, EmptyRecycleBinService>();

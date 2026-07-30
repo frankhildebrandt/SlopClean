@@ -1,4 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
+using Microsoft.Windows.ApplicationModel.Resources;
 using SlopClean.App.Helpers;
 using SlopClean.Core.Models;
 
@@ -10,6 +12,7 @@ public partial class FindingItemViewModel : ObservableObject
     {
         Finding = finding;
         IsSelected = finding.IsActionable;
+        GoToFolderLabel = ResolveGoToFolderLabel();
     }
 
     public ScanFinding Finding { get; }
@@ -22,4 +25,30 @@ public partial class FindingItemViewModel : ObservableObject
     public string SizeText => ByteSizeFormatter.Format(Finding.SizeBytes);
     public string RiskText => Finding.Risk.ToString();
     public bool IsActionable => Finding.IsActionable;
+    public string GoToFolderLabel { get; }
+    public bool CanGoToFolder => ShellReveal.CanReveal(Finding.Path);
+
+    [RelayCommand(CanExecute = nameof(CanGoToFolder))]
+    private void GoToFolder()
+    {
+        if (Finding.Path is null || !CanGoToFolder)
+        {
+            return;
+        }
+
+        ShellReveal.OpenInExplorer(Finding.Path);
+    }
+
+    private static string ResolveGoToFolderLabel()
+    {
+        try
+        {
+            var label = new ResourceLoader().GetString("FindingList_GoToFolder");
+            return string.IsNullOrWhiteSpace(label) ? "Go to Folder" : label;
+        }
+        catch
+        {
+            return "Go to Folder";
+        }
+    }
 }

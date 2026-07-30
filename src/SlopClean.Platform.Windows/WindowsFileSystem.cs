@@ -151,6 +151,8 @@ public sealed class WindowsFileSystem : IFileSystem
 
     public string ReadAllText(string path) => File.ReadAllText(path);
 
+    public Stream OpenRead(string path) => File.OpenRead(path);
+
     public string GetFullPath(string path) => Path.GetFullPath(path);
 
     public string GetTempPath() => Path.GetTempPath();
